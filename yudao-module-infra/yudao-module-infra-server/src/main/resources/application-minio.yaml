@@ -1,0 +1,17 @@
+# MinIO 文件存储配置
+# 使用方式: spring.profiles.active=local,minio
+
+yudao:
+  file:
+    # 文件客户端配置
+    client:
+      # 主配置（默认使用）
+      master:
+        type: s3  # 使用 S3 协议（MinIO 兼容）
+        config:
+          endpoint: http://localhost:9000  # MinIO API 端点（9001 为控制台）
+          bucket: xiaolvshu-dev            # Bucket 名称
+          accessKey: minioadmin            # 访问密钥
+          accessSecret: minioadmin         # 访问密钥
+          enablePathStyleAccess: true      # 启用 PathStyle 访问（MinIO 必需）
+          enablePublicAccess: true         # 公开访问（开发环境）

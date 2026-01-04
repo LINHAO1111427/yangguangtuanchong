@@ -1,0 +1,64 @@
+package cn.iocoder.yudao.module.member.enums.point;
+
+import cn.hutool.core.util.EnumUtil;
+import cn.iocoder.yudao.framework.common.core.ArrayValuable;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+import java.util.Arrays;
+import java.util.Objects;
+
+/**
+ * 会员积分的业务类型枚举
+ *
+ * @author 芋道源码
+ */
+@AllArgsConstructor
+@Getter
+public enum MemberPointBizTypeEnum implements ArrayValuable<Integer> {
+
+    SIGN(1, "签到", "签到获得 {} 积分", true),
+    ADMIN(2, "管理员调整", "管理员调整 {} 积分", true),
+    TASK_REWARD(3, "会员任务奖励", "完成任务获得 {} 积分", true),
+
+    ORDER_USE(11, "订单积分抵扣", "下单使用 {} 积分", false), // 下单时，扣减积分
+    ORDER_USE_CANCEL(12, "订单积分抵扣（整单取消）", "订单取消，退回 {} 积分", true), // ORDER_USE 的取反
+    ORDER_USE_CANCEL_ITEM(13, "订单积分抵扣（单个退款）", "订单退款，退回 {} 积分", true), // ORDER_USE 的取反
+
+    ORDER_GIVE(21, "订单积分奖励", "下单获得 {} 积分", true), // 支付订单时，赠送积分
+    ORDER_GIVE_CANCEL(22, "订单积分奖励（整单取消）", "订单取消，退回 {} 积分", false), // ORDER_GIVE 的取反
+    ORDER_GIVE_CANCEL_ITEM(23, "订单积分奖励（单个退款）", "订单退款，扣除赠送的 {} 积分", false) // ORDER_GIVE 的取反
+    ;
+
+    public static final Integer[] ARRAYS = Arrays.stream(values())
+            .map(MemberPointBizTypeEnum::getType)
+            .toArray(Integer[]::new);
+
+    /**
+     * 类型
+     */
+    private final Integer type;
+    /**
+     * 名字
+     */
+    private final String name;
+    /**
+     * 描述
+     */
+    private final String description;
+    /**
+     * 是否为扣减积分
+     */
+    private final boolean add;
+
+    @Override
+    public Integer[] array() {
+        return ARRAYS;
+    }
+
+    public static MemberPointBizTypeEnum getByType(Integer type) {
+        return EnumUtil.getBy(MemberPointBizTypeEnum.class,
+                e -> Objects.equals(type, e.getType()));
+    }
+
+}

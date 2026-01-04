@@ -1,0 +1,105 @@
+﻿spring:
+  application:
+    name: message-server
+
+  profiles:
+    active: local
+
+  main:
+    allow-bean-definition-overriding: true
+    allow-circular-references: true
+
+  config:
+    import:
+      - optional:classpath:application-${spring.profiles.active}.yml
+      # 暂时禁用Nacos配置中心
+      # - optional:nacos:${spring.application.name}-${spring.profiles.active}.yaml
+
+server:
+  port: 48084
+
+--- # Data Source & Cache
+
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://127.0.0.1:55432/xiaolvshu?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+
+--- # Kafka Configuration
+
+spring:
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      retries: 3
+      batch-size: 16384
+      buffer-memory: 33554432
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      group-id: message-consumer-group
+      enable-auto-commit: true
+      auto-commit-interval: 1000
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+
+
+
+--- # Scheduled Jobs
+
+xxl:
+  job:
+    enabled: false
+
+--- # Yudao Settings
+
+yudao:
+  security:
+    token-header: Authorization
+    token-parameter: token
+    mock-enable: false
+    mock-secret: test
+    password-encoder-length: 4
+    permit-all-urls:
+      - /message/ws/**
+      - /app-api/message/ws/**
+  websocket:
+    enable: true
+  info:
+    version: 1.0.0
+    base-package: cn.iocoder.yudao.module.message
+  web:
+    app-api:
+      prefix: /app-api
+      controller: "**.controller.app.**"
+    admin-api:
+      prefix: /admin-api
+      controller: "**.controller.admin.**"
+    admin-ui:
+      url: http://dashboard.yudao.iocoder.cn
+  xss:
+    enable: false
+  swagger:
+    enable: false  # 暂时禁用 Swagger
+    title: Message Service
+    description: Messaging related APIs
+    version: ${yudao.info.version}
+    base-package: ${yudao.info.base-package}
+  tenant:
+    enable: false
+
+
+
+
+message:
+  websocket:
+    path: /message/ws,/app-api/message/ws

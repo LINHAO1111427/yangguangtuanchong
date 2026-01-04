@@ -1,0 +1,153 @@
+--- #################### 注册中心 + 配置中心相关配置 ####################
+
+spring:
+  cloud:
+    nacos:
+      server-addr: 127.0.0.1:8848
+      username:
+      password:
+      discovery:
+        namespace: dev
+        group: DEFAULT_GROUP
+        metadata:
+          version: 1.0.0
+      config:
+        namespace: dev
+        group: DEFAULT_GROUP
+    # LoadBalancer 配置
+    loadbalancer:
+      ribbon:
+        enabled: false
+      cache:
+        enabled: true
+        ttl: 5s
+    # OpenFeign 配置
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 10000  # 连接超时: 10秒
+            read-timeout: 60000     # 读取超时: 60秒 (用于处理大文件上传)
+      compression:
+        request:
+          enabled: true
+        response:
+          enabled: true
+
+--- #################### 数据库相关配置 ####################
+
+spring:
+  datasource:
+    druid:
+      web-stat-filter:
+        enabled: true
+      stat-view-servlet:
+        enabled: true
+        allow:
+        url-pattern: /druid/*
+        login-username:
+        login-password:
+      filter:
+        stat:
+          enabled: true
+          log-slow-sql: true
+          slow-sql-millis: 100
+          merge-sql: true
+        wall:
+          config:
+            multi-statement-allow: true
+    dynamic:
+      druid:
+        initial-size: 1
+        min-idle: 1
+        max-active: 20
+        max-wait: 60000
+        time-between-eviction-runs-millis: 60000
+        min-evictable-idle-time-millis: 600000
+        max-evictable-idle-time-millis: 1800000
+        validation-query: SELECT 1
+        test-while-idle: true
+        test-on-borrow: false
+        test-on-return: false
+      primary: master
+      datasource:
+        master:
+          url: jdbc:postgresql://127.0.0.1:55432/xiaolvshu_content?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+          driver-class-name: org.postgresql.Driver
+          username: ${POSTGRES_USER:postgres}
+          password: ${POSTGRES_PASSWORD:postgres}
+        slave:
+          lazy: true
+          url: jdbc:postgresql://127.0.0.1:55433/xiaolvshu_content?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+          driver-class-name: org.postgresql.Driver
+          username: ${POSTGRES_USER:postgres}
+          password: ${POSTGRES_PASSWORD:postgres}
+
+  # Redis 配置。Redisson 默认的配置足够使用，一般不需要进行调优
+  data:
+    redis:
+      host: 127.0.0.1 # 地址
+      port: 6379 # 端口
+      database: 1 # 数据库索引
+#      password: 123456 # 密码，建议生产环境开启
+
+--- #################### Kafka 消息队列相关配置 ####################
+
+spring:
+  kafka:
+    # Kafka 服务器地址
+    bootstrap-servers: 127.0.0.1:9092
+    # 生产者配置
+    producer:
+      # 发送失败重试次数
+      retries: 3
+      # 批量发送大小（字节）
+      batch-size: 16384
+      # 缓冲区大小（字节）
+      buffer-memory: 33554432
+      # Key 序列化器
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Value 序列化器
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 压缩类型
+      compression-type: gzip
+      # ACK 确认级别 (0=不等待, 1=等待leader确认, all=等待所有副本确认)
+      acks: 1
+    # 消费者配置
+    consumer:
+      # 消费者组ID
+      group-id: content-consumer-group
+      # 关闭自动提交，改为手动提交
+      enable-auto-commit: false
+      # 消费起始位置 (earliest=从头开始, latest=从最新开始)
+      auto-offset-reset: earliest
+      # 单次拉取最大记录数
+      max-poll-records: 500
+      # Key 反序列化器
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # Value 反序列化器
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    # 监听器配置
+    listener:
+      # 手动提交模式
+      ack-mode: manual
+      # 并发消费线程数
+      concurrency: 3
+    # 管理配置（用于创建Topic）
+    admin:
+      # 创建Topic失败不影响启动
+      fail-fast: false
+
+--- #################### 定时任务相关配置 ####################
+
+xxl:
+  job:
+    enabled: false
+    admin:
+      addresses: http://127.0.0.1:9090/xxl-job-admin
+
+--- #################### 服务保障相关配置 ####################
+
+lock4j:
+  acquire-timeout: 3000
+  expire: 30000
