@@ -6,13 +6,16 @@ import cn.iocoder.yudao.module.content.dal.dataobject.TopicFollowDO;
 import cn.iocoder.yudao.module.content.dal.dataobject.UserFollowDO;
 import cn.iocoder.yudao.module.content.dal.mysql.TopicFollowMapper;
 import cn.iocoder.yudao.module.content.dal.mysql.UserFollowMapper;
+import cn.iocoder.yudao.module.content.framework.kafka.producer.ContentKafkaProducer;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -29,14 +32,18 @@ public class FollowServiceImpl implements FollowService {
     private UserFollowMapper userFollowMapper;
     @Resource
     private TopicFollowMapper topicFollowMapper;
+    @Resource
+    private ContentKafkaProducer contentKafkaProducer;
 
     @Override
     public boolean followUser(Long followerId, Long targetId, String remark) {
         validateUserIds(followerId, targetId);
         UserFollowDO existing = userFollowMapper.selectOne(followerId, targetId);
-        if (existing != null && Objects.equals(existing.getStatus(), STATUS_ACTIVE) && Boolean.FALSE.equals(existing.getDeleted())) {
+        if (existing != null && Objects.equals(existing.getStatus(), STATUS_ACTIVE)
+                && ObjectUtil.equal(existing.getDeleted(), 0)) {
             return true;
         }
+        boolean shouldNotify = false;
         if (existing == null) {
             UserFollowDO record = new UserFollowDO();
             record.setFollowerId(followerId);
@@ -46,13 +53,18 @@ public class FollowServiceImpl implements FollowService {
             record.setRemark(remark);
             record.setDeleted(0);
             userFollowMapper.insert(record);
-            return true;
+            shouldNotify = true;
+        } else {
+            existing.setStatus(STATUS_ACTIVE);
+            existing.setDeleted(0);
+            existing.setUpdateTime(LocalDateTime.now());
+            existing.setRemark(remark);
+            userFollowMapper.updateById(existing);
+            shouldNotify = true;
         }
-        existing.setStatus(STATUS_ACTIVE);
-        existing.setDeleted(0);
-        existing.setUpdateTime(LocalDateTime.now());
-        existing.setRemark(remark);
-        userFollowMapper.updateById(existing);
+        if (shouldNotify) {
+            sendFollowEvent(followerId, targetId);
+        }
         return true;
     }
 
@@ -81,9 +93,22 @@ public class FollowServiceImpl implements FollowService {
             return List.of();
         }
         return list.stream()
-                .filter(r -> Boolean.FALSE.equals(r.getDeleted()) && ObjectUtil.equal(r.getStatus(), STATUS_ACTIVE))
+                .filter(r -> ObjectUtil.equal(r.getDeleted(), 0) && ObjectUtil.equal(r.getStatus(), STATUS_ACTIVE))
                 .map(UserFollowDO::getTargetId)
                 .collect(Collectors.toList());
+    }
+
+    private void sendFollowEvent(Long followerId, Long targetId) {
+        if (followerId == null || targetId == null) {
+            return;
+        }
+        Map<String, Object> event = new HashMap<>();
+        event.put("behaviorType", "follow");
+        event.put("action", "add");
+        event.put("actorUserId", followerId);
+        event.put("targetUserId", targetId);
+        event.put("eventTime", LocalDateTime.now().toString());
+        contentKafkaProducer.sendBehaviorEvent(event);
     }
 
     @Override
@@ -97,7 +122,7 @@ public class FollowServiceImpl implements FollowService {
             return List.of();
         }
         return list.stream()
-                .filter(r -> Boolean.FALSE.equals(r.getDeleted()) && ObjectUtil.equal(r.getStatus(), STATUS_ACTIVE))
+                .filter(r -> ObjectUtil.equal(r.getDeleted(), 0) && ObjectUtil.equal(r.getStatus(), STATUS_ACTIVE))
                 .map(UserFollowDO::getFollowerId)
                 .collect(Collectors.toList());
     }
@@ -118,7 +143,8 @@ public class FollowServiceImpl implements FollowService {
             return false;
         }
         UserFollowDO existing = userFollowMapper.selectOne(followerId, targetId);
-        return existing != null && Boolean.FALSE.equals(existing.getDeleted()) && ObjectUtil.equal(existing.getStatus(), STATUS_ACTIVE);
+        return existing != null && ObjectUtil.equal(existing.getDeleted(), 0)
+                && ObjectUtil.equal(existing.getStatus(), STATUS_ACTIVE);
     }
 
     @Override
@@ -126,7 +152,8 @@ public class FollowServiceImpl implements FollowService {
         Assert.notNull(userId, "userId不能为空");
         Assert.notNull(topicId, "topicId不能为空");
         TopicFollowDO existing = topicFollowMapper.selectOne(userId, topicId);
-        if (existing != null && ObjectUtil.equal(existing.getStatus(), STATUS_ACTIVE) && Boolean.FALSE.equals(existing.getDeleted())) {
+        if (existing != null && ObjectUtil.equal(existing.getStatus(), STATUS_ACTIVE)
+                && ObjectUtil.equal(existing.getDeleted(), 0)) {
             return true;
         }
         if (existing == null) {
@@ -167,7 +194,8 @@ public class FollowServiceImpl implements FollowService {
             return false;
         }
         TopicFollowDO existing = topicFollowMapper.selectOne(userId, topicId);
-        return existing != null && Boolean.FALSE.equals(existing.getDeleted()) && ObjectUtil.equal(existing.getStatus(), STATUS_ACTIVE);
+        return existing != null && ObjectUtil.equal(existing.getDeleted(), 0)
+                && ObjectUtil.equal(existing.getStatus(), STATUS_ACTIVE);
     }
 
     @Override
@@ -180,7 +208,7 @@ public class FollowServiceImpl implements FollowService {
             return new ArrayList<>();
         }
         return list.stream()
-                .filter(r -> Boolean.FALSE.equals(r.getDeleted()) && ObjectUtil.equal(r.getStatus(), STATUS_ACTIVE))
+                .filter(r -> ObjectUtil.equal(r.getDeleted(), 0) && ObjectUtil.equal(r.getStatus(), STATUS_ACTIVE))
                 .map(TopicFollowDO::getTopicId)
                 .collect(Collectors.toList());
     }

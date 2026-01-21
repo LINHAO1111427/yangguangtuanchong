@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.content.dal.dataobject.ChannelVisitStatsDO;
 import cn.iocoder.yudao.module.content.dal.dataobject.ContentInteractionDO;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -27,9 +28,17 @@ public interface ContentInteractionMapper extends BaseMapperX<ContentInteraction
                 .last("LIMIT 1"));
     }
 
+    @Select("SELECT * FROM content_interaction " +
+            "WHERE content_id = #{contentId} AND user_id = #{userId} AND interaction_type = #{type} " +
+            "ORDER BY id DESC LIMIT 1")
+    ContentInteractionDO selectOneIncludeDeleted(@Param("contentId") Long contentId,
+                                                 @Param("userId") Long userId,
+                                                 @Param("type") Integer type);
+
     default List<ContentInteractionDO> selectRecent(Long userId, Integer type, int limit) {
         LambdaQueryWrapperX<ContentInteractionDO> wrapper = new LambdaQueryWrapperX<ContentInteractionDO>()
                 .eq(ContentInteractionDO::getUserId, userId)
+                .eq(ContentInteractionDO::getDeleted, (short) 0)
                 .orderByDesc(ContentInteractionDO::getUpdateTime);
         if (type != null) {
             wrapper.eq(ContentInteractionDO::getInteractionType, type);
@@ -83,12 +92,46 @@ public interface ContentInteractionMapper extends BaseMapperX<ContentInteraction
     default int softDeleteByUserAndType(Long userId, Integer type) {
         LambdaQueryWrapperX<ContentInteractionDO> wrapper = new LambdaQueryWrapperX<ContentInteractionDO>()
                 .eq(ContentInteractionDO::getUserId, userId)
-                .eq(ContentInteractionDO::getInteractionType, type)
-                .eq(ContentInteractionDO::getDeleted, (short) 0);
+                .eq(ContentInteractionDO::getInteractionType, type);
         ContentInteractionDO update = new ContentInteractionDO();
         update.setDeleted((short) 1);
         return update(update, wrapper);
     }
+
+    /**
+     * 按用户、交互类型与内容 ID 批量软删
+     */
+    default int softDeleteByUserAndTypeAndContentIds(Long userId, Integer type, Collection<Long> contentIds) {
+        if (userId == null || CollUtil.isEmpty(contentIds)) {
+            return 0;
+        }
+        LambdaQueryWrapperX<ContentInteractionDO> wrapper = new LambdaQueryWrapperX<ContentInteractionDO>()
+                .eq(ContentInteractionDO::getUserId, userId)
+                .eq(ContentInteractionDO::getInteractionType, type)
+                .in(ContentInteractionDO::getContentId, contentIds);
+        ContentInteractionDO update = new ContentInteractionDO();
+        update.setDeleted((short) 1);
+        return update(update, wrapper);
+    }
+
+    @Delete("DELETE FROM content_interaction WHERE user_id = #{userId} AND interaction_type = #{type}")
+    int hardDeleteByUserAndType(@Param("userId") Long userId,
+                                @Param("type") Integer type);
+
+    @Delete({
+            "<script>",
+            "DELETE FROM content_interaction",
+            " WHERE user_id = #{userId}",
+            " AND interaction_type = #{type}",
+            " AND content_id IN",
+            " <foreach collection='contentIds' item='id' open='(' separator=',' close=')'>",
+            "   #{id}",
+            " </foreach>",
+            "</script>"
+    })
+    int hardDeleteByUserAndTypeAndContentIds(@Param("userId") Long userId,
+                                             @Param("type") Integer type,
+                                             @Param("contentIds") Collection<Long> contentIds);
 
     /**
      * 统计用户最近访问的频道情况

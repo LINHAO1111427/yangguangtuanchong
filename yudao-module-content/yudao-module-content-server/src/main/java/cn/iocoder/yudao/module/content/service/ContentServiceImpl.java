@@ -243,6 +243,8 @@ public class ContentServiceImpl implements ContentService {
         vo.setUserId(authorId);
         vo.setNickname(StrUtil.blankToDefault(author.getNickname(), "匿名用户"));
         vo.setAvatar(author.getAvatar());
+        vo.setCustomId(author.getCustomId() != null ? String.valueOf(author.getCustomId()) : null);
+        vo.setBackgroundUrl(author.getBackgroundUrl());
         vo.setPoint(author.getPoint());
         vo.setWorkCount(stats.getWorkCount());
         vo.setFollowingCount(followService.countFollowing(authorId));
@@ -650,6 +652,8 @@ public class ContentServiceImpl implements ContentService {
         detail.setIsLiked(base.getIsLiked());
         detail.setIsCollected(base.getIsCollected());
         detail.setIsFollowed(base.getIsFollowed());
+        detail.setAuthorNickname(base.getAuthorNickname());
+        detail.setAuthorAvatar(base.getAuthorAvatar());
         detail.setCreateTime(base.getCreateTime());
         detail.setUpdateTime(base.getUpdateTime());
         detail.setPublishTime(base.getPublishTime());
@@ -739,14 +743,14 @@ public class ContentServiceImpl implements ContentService {
     }
 
     private boolean toggleInteraction(Long contentId, Long userId, int type, String ip, String ua) {
-        ContentInteractionDO interaction = contentInteractionMapper.selectOne(contentId, userId, type);
+        ContentInteractionDO interaction = contentInteractionMapper.selectOneIncludeDeleted(contentId, userId, type);
         boolean nextStatus = interaction == null || isDeletedFlag(interaction.getDeleted());
         persistInteraction(interaction, contentId, userId, type, ip, ua, nextStatus);
         return nextStatus;
     }
 
     private void upsertInteraction(Long contentId, Long userId, int type, String ip, String ua, boolean active) {
-        ContentInteractionDO interaction = contentInteractionMapper.selectOne(contentId, userId, type);
+        ContentInteractionDO interaction = contentInteractionMapper.selectOneIncludeDeleted(contentId, userId, type);
         persistInteraction(interaction, contentId, userId, type, ip, ua, active);
     }
 
@@ -988,6 +992,14 @@ public class ContentServiceImpl implements ContentService {
         List<ContentListRespVO> contentList = getContentListByIds(contentIds, userId);
         Long total = contentInteractionMapper.countByUserAndType(userId, INTERACTION_VIEW);
         return new PageResult<>(contentList, total);
+    }
+
+    @Override
+    public void deleteMyViewHistory(Long userId, Collection<Long> contentIds) {
+        if (userId == null || CollUtil.isEmpty(contentIds)) {
+            return;
+        }
+        contentInteractionMapper.softDeleteByUserAndTypeAndContentIds(userId, INTERACTION_VIEW, contentIds);
     }
 
     @Override

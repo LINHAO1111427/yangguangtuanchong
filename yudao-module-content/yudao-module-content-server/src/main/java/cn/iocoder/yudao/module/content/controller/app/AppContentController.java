@@ -8,7 +8,9 @@ import cn.iocoder.yudao.module.content.controller.app.vo.ContentCreateReqVO;
 import cn.iocoder.yudao.module.content.controller.app.vo.ContentDetailRespVO;
 import cn.iocoder.yudao.module.content.controller.app.vo.ContentListRespVO;
 import cn.iocoder.yudao.module.content.controller.app.vo.ContentPageReqVO;
+import cn.iocoder.yudao.module.content.controller.app.vo.ContentToggleRespVO;
 import cn.iocoder.yudao.module.content.controller.app.vo.ContentUpdateReqVO;
+import cn.iocoder.yudao.module.content.dal.dataobject.ContentDO;
 import cn.iocoder.yudao.module.content.service.ContentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,6 +21,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -145,25 +148,33 @@ public class AppContentController {
     @PostMapping("/like")
     @Operation(summary = "Toggle like")
     @PreAuthorize("isAuthenticated()")
-    public CommonResult<Boolean> toggleLike(@NotNull @RequestParam("content_id") Long contentId,
+    public CommonResult<ContentToggleRespVO> toggleLike(@NotNull @RequestParam("content_id") Long contentId,
                                             HttpServletRequest request) {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         boolean liked = contentService.toggleLike(contentId, userId,
                 ServletUtils.getClientIP(request),
                 request.getHeader("User-Agent"));
-        return success(liked);
+        ContentDO content = contentService.getContent(contentId);
+        ContentToggleRespVO resp = new ContentToggleRespVO();
+        resp.setLiked(liked);
+        resp.setLikeCount(content != null ? content.getLikeCount() : null);
+        return success(resp);
     }
 
     @PostMapping("/collect")
     @Operation(summary = "Toggle favourite")
     @PreAuthorize("isAuthenticated()")
-    public CommonResult<Boolean> toggleCollect(@NotNull @RequestParam("content_id") Long contentId,
+    public CommonResult<ContentToggleRespVO> toggleCollect(@NotNull @RequestParam("content_id") Long contentId,
                                                HttpServletRequest request) {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         boolean collected = contentService.toggleCollect(contentId, userId,
                 ServletUtils.getClientIP(request),
                 request.getHeader("User-Agent"));
-        return success(collected);
+        ContentDO content = contentService.getContent(contentId);
+        ContentToggleRespVO resp = new ContentToggleRespVO();
+        resp.setCollected(collected);
+        resp.setCollectCount(content != null ? content.getCollectCount() : null);
+        return success(resp);
     }
 
     @PostMapping("/share")
@@ -306,6 +317,15 @@ public class AppContentController {
         pageReqVO.setPageNo(page);
         pageReqVO.setPageSize(size);
         return success(contentService.getMyViewHistory(userId, pageReqVO));
+    }
+
+    @DeleteMapping("/history/delete")
+    @Operation(summary = "删除我的浏览历史（指定内容）")
+    @PreAuthorize("isAuthenticated()")
+    public CommonResult<Boolean> deleteMyViewHistory(@RequestBody @NotEmpty List<Long> contentIds) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        contentService.deleteMyViewHistory(userId, contentIds);
+        return success(Boolean.TRUE);
     }
 
     @DeleteMapping("/history")
