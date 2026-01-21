@@ -38,10 +38,24 @@ public interface MemberVisitorLogMapper extends BaseMapperX<MemberVisitorLogDO> 
                                                              @Param("beginTime") LocalDateTime beginTime,
                                                              @Param("endTime") LocalDateTime endTime);
 
-    interface MemberVisitorDayRow {
-        String getDay();
+    class MemberVisitorDayRow {
+        private String day;
+        private Long cnt;
 
-        Long getCnt();
+        public String getDay() {
+            return day;
+        }
+
+        public void setDay(String day) {
+            this.day = day;
+        }
+
+        public Long getCnt() {
+            return cnt;
+        }
+
+        public void setCnt(Long cnt) {
+            this.cnt = cnt;
+        }
     }
 }
-
