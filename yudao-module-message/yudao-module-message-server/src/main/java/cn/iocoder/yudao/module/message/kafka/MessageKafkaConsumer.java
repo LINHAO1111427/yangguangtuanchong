@@ -26,6 +26,7 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,7 +72,7 @@ public class MessageKafkaConsumer {
                 return;
             }
             Set<Long> memberIds = Set.of(message.getFromUserId(), message.getToUserId());
-            Map<Long, MemberUserRespDTO> memberMap = memberUserApi.getUserMap(memberIds);
+            Map<Long, MemberUserRespDTO> memberMap = loadMemberUserMap(memberIds);
 
             pushPrivateMessage(message, message.getFromUserId(), message.getToUserId(), memberMap);
             pushPrivateMessage(message, message.getToUserId(), message.getFromUserId(), memberMap);
@@ -196,6 +197,37 @@ public class MessageKafkaConsumer {
             }
         }
         return null;
+    }
+
+    private Map<Long, MemberUserRespDTO> loadMemberUserMap(Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, MemberUserRespDTO> map = new HashMap<>();
+        try {
+            Map<Long, MemberUserRespDTO> fetched = memberUserApi.getUserMap(userIds);
+            if (fetched != null) {
+                map.putAll(fetched);
+            }
+        } catch (Exception e) {
+            log.warn("[loadMemberUserMap] load users failed, ids={}", userIds, e);
+        }
+        if (map.size() < userIds.size()) {
+            for (Long userId : userIds) {
+                if (userId == null || map.containsKey(userId)) {
+                    continue;
+                }
+                try {
+                    MemberUserRespDTO user = memberUserApi.getUser(userId).getCheckedData();
+                    if (user != null) {
+                        map.put(userId, user);
+                    }
+                } catch (Exception ex) {
+                    log.warn("[loadMemberUserMap] load user failed, id={}, reason={}", userId, ex.getMessage());
+                }
+            }
+        }
+        return map;
     }
 
 }

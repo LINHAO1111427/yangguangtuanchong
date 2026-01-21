@@ -25,4 +25,14 @@ public class FollowApiImpl implements FollowApi {
     public CommonResult<Boolean> isFollowingUser(Long followerId, Long targetId) {
         return success(followService.isFollowingUser(followerId, targetId));
     }
+
+    @Override
+    public CommonResult<Boolean> followUser(Long followerId, Long targetId, String remark) {
+        return success(followService.followUser(followerId, targetId, remark));
+    }
+
+    @Override
+    public CommonResult<Boolean> unfollowUser(Long followerId, Long targetId) {
+        return success(followService.unfollowUser(followerId, targetId));
+    }
 }

@@ -26,6 +26,7 @@ public interface ErrorCodeConstants {
     ErrorCode TOPIC_NAME_EXISTS = new ErrorCode(1_005_002_001, "话题名称已存在");
     ErrorCode TOPIC_DISABLED = new ErrorCode(1_005_002_002, "话题已被禁用");
     ErrorCode TOPIC_NAME_TOO_LONG = new ErrorCode(1_005_002_003, "话题名称长度不能超过50个字符");
+    ErrorCode CHANNEL_NOT_EXISTS = new ErrorCode(1_005_002_004, "频道不存在");
 
     // ========== 互动相关 1-005-003-000 ==========
     ErrorCode INTERACTION_DUPLICATE = new ErrorCode(1_005_003_000, "重复操作");

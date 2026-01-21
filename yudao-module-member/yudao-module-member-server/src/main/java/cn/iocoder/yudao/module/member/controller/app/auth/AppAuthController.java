@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,10 +43,16 @@ public class AppAuthController {
     @Resource
     private SecurityProperties securityProperties;
 
-    @PostMapping("/login")
+    @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "使用手机 + 密码登录")
     @PermitAll
     public CommonResult<AppAuthLoginRespVO> login(@RequestBody @Valid AppAuthLoginReqVO reqVO) {
+        return success(authService.login(reqVO));
+    }
+
+    @PostMapping(value = "/login", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<AppAuthLoginRespVO> loginForm(@Valid AppAuthLoginReqVO reqVO) {
         return success(authService.login(reqVO));
     }
 
@@ -71,7 +78,7 @@ public class AppAuthController {
 
     // ========== 注册相关 ==========
 
-    @PostMapping("/register")
+    @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "用户注册")
     @PermitAll
     public CommonResult<Boolean> register(@RequestBody @Valid AppAuthRegisterReqVO reqVO) {
@@ -79,16 +86,29 @@ public class AppAuthController {
         return success(true);
     }
 
+    @PostMapping(value = "/register", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<Boolean> registerForm(@Valid AppAuthRegisterReqVO reqVO) {
+        authService.register(reqVO);
+        return success(true);
+    }
+
     // ========== 短信登录相关 ==========
 
-    @PostMapping("/sms-login")
+    @PostMapping(value = "/sms-login", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "使用手机 + 验证码登录")
     @PermitAll
     public CommonResult<AppAuthLoginRespVO> smsLogin(@RequestBody @Valid AppAuthSmsLoginReqVO reqVO) {
         return success(authService.smsLogin(reqVO));
     }
 
-    @PostMapping("/send-sms-code")
+    @PostMapping(value = "/sms-login", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<AppAuthLoginRespVO> smsLoginForm(@Valid AppAuthSmsLoginReqVO reqVO) {
+        return success(authService.smsLogin(reqVO));
+    }
+
+    @PostMapping(value = "/send-sms-code", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "发送手机验证码")
     @PermitAll
     public CommonResult<Boolean> sendSmsCode(@RequestBody @Valid AppAuthSmsSendReqVO reqVO) {
@@ -96,10 +116,24 @@ public class AppAuthController {
         return success(true);
     }
 
-    @PostMapping("/validate-sms-code")
+    @PostMapping(value = "/send-sms-code", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<Boolean> sendSmsCodeForm(@Valid AppAuthSmsSendReqVO reqVO) {
+        authService.sendSmsCode(getLoginUserId(), reqVO);
+        return success(true);
+    }
+
+    @PostMapping(value = "/validate-sms-code", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "校验手机验证码")
     @PermitAll
     public CommonResult<Boolean> validateSmsCode(@RequestBody @Valid AppAuthSmsValidateReqVO reqVO) {
+        authService.validateSmsCode(getLoginUserId(), reqVO);
+        return success(true);
+    }
+
+    @PostMapping(value = "/validate-sms-code", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<Boolean> validateSmsCodeForm(@Valid AppAuthSmsValidateReqVO reqVO) {
         authService.validateSmsCode(getLoginUserId(), reqVO);
         return success(true);
     }
@@ -118,17 +152,29 @@ public class AppAuthController {
         return CommonResult.success(authService.getSocialAuthorizeUrl(type, redirectUri));
     }
 
-    @PostMapping("/social-login")
+    @PostMapping(value = "/social-login", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "社交快捷登录，使用 code 授权码", description = "适合未登录的用户，但是社交账号已绑定用户")
     @PermitAll
     public CommonResult<AppAuthLoginRespVO> socialLogin(@RequestBody @Valid AppAuthSocialLoginReqVO reqVO) {
         return success(authService.socialLogin(reqVO));
     }
 
-    @PostMapping("/weixin-mini-app-login")
+    @PostMapping(value = "/social-login", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<AppAuthLoginRespVO> socialLoginForm(@Valid AppAuthSocialLoginReqVO reqVO) {
+        return success(authService.socialLogin(reqVO));
+    }
+
+    @PostMapping(value = "/weixin-mini-app-login", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "微信小程序的一键登录")
     @PermitAll
     public CommonResult<AppAuthLoginRespVO> weixinMiniAppLogin(@RequestBody @Valid AppAuthWeixinMiniAppLoginReqVO reqVO) {
+        return success(authService.weixinMiniAppLogin(reqVO));
+    }
+
+    @PostMapping(value = "/weixin-mini-app-login", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    @PermitAll
+    public CommonResult<AppAuthLoginRespVO> weixinMiniAppLoginForm(@Valid AppAuthWeixinMiniAppLoginReqVO reqVO) {
         return success(authService.weixinMiniAppLogin(reqVO));
     }
 

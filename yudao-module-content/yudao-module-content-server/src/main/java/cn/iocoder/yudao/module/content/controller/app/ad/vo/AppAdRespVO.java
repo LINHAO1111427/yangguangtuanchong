@@ -17,11 +17,23 @@ public class AppAdRespVO {
     @Schema(description = "封面图片")
     private String image;
 
+    @Schema(description = "封面图片(兼容字段)")
+    private String coverImage;
+
+    @Schema(description = "媒体类型")
+    private String mediaType;
+
+    @Schema(description = "视频地址")
+    private String videoUrl;
+
     @Schema(description = "跳转链接")
     private String link;
 
     @Schema(description = "展示场景")
     private Integer scene;
+
+    @Schema(description = "Category name")
+    private String categoryName;
 
     @Schema(description = "排序优先级")
     private Integer priority;
@@ -58,6 +70,30 @@ public class AppAdRespVO {
         this.image = image;
     }
 
+    public String getCoverImage() {
+        return coverImage;
+    }
+
+    public void setCoverImage(String coverImage) {
+        this.coverImage = coverImage;
+    }
+
+    public String getMediaType() {
+        return mediaType;
+    }
+
+    public void setMediaType(String mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getVideoUrl() {
+        return videoUrl;
+    }
+
+    public void setVideoUrl(String videoUrl) {
+        this.videoUrl = videoUrl;
+    }
+
     public String getLink() {
         return link;
     }
@@ -72,6 +108,14 @@ public class AppAdRespVO {
 
     public void setScene(Integer scene) {
         this.scene = scene;
+    }
+
+    public String getCategoryName() {
+        return categoryName;
+    }
+
+    public void setCategoryName(String categoryName) {
+        this.categoryName = categoryName;
     }
 
     public Integer getPriority() {

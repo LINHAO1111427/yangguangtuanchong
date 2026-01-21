@@ -46,6 +46,12 @@ public class ContentFeedService {
 
     private static final Logger log = LoggerFactory.getLogger(ContentFeedService.class);
     private static final int DEFAULT_HISTORY_LIMIT = 30;
+    private static final int MIN_AD_INTERVAL = 3;
+    private static final int DEFAULT_AD_JITTER = 1;
+    private static final int DEFAULT_MAX_ADS_PER_PAGE = 4;
+    private static final int VIDEO_AD_INTERVAL = 6;
+    private static final int VIDEO_FIRST_AD_AFTER = 3;
+    private static final int VIDEO_MAX_ADS_PER_PAGE = 2;
 
     @Resource
     private ContentService contentService;
@@ -163,15 +169,37 @@ public class ContentFeedService {
     }
 
     private void injectAds(List<FeedCardBO> cards, Long userId, FeedStreamRequestBO requestBO) {
-        List<ContentAdDO> ads = contentAdService.pickAds(userId,
-                sceneToInt(requestBO.getScene()), Math.max(1, requestBO.getPageSize() / requestBO.getAdInterval()));
+        if (CollUtil.isEmpty(cards)) {
+            return;
+        }
+        boolean videoScene = "video".equalsIgnoreCase(requestBO.getScene());
+        int baseInterval = Math.max(MIN_AD_INTERVAL, requestBO.getAdInterval());
+        int adInterval = videoScene ? Math.max(baseInterval, VIDEO_AD_INTERVAL) : baseInterval;
+        int maxAdsBySize = cards.size() / adInterval;
+        int maxAdsPerPage = videoScene ? VIDEO_MAX_ADS_PER_PAGE : DEFAULT_MAX_ADS_PER_PAGE;
+        int targetAdCount = Math.min(maxAdsBySize, maxAdsPerPage);
+        if (targetAdCount <= 0) {
+            return;
+        }
+        long seed = buildAdSeed(userId, requestBO.getScene(), requestBO.getPageNo());
+        java.util.Random random = new java.util.Random(seed);
+        int firstOffset = videoScene ? VIDEO_FIRST_AD_AFTER : 0;
+        List<Integer> positions = computeAdPositions(cards.size(), targetAdCount,
+                adInterval, firstOffset, DEFAULT_AD_JITTER, random);
+        if (CollUtil.isEmpty(positions)) {
+            return;
+        }
+        List<ContentAdDO> ads = contentAdService.pickAds(userId, sceneToInt(requestBO.getScene()),
+                Math.min(targetAdCount, positions.size()), seed, videoScene);
         if (CollUtil.isEmpty(ads)) {
             return;
         }
-        int interval = Math.max(3, requestBO.getAdInterval());
-        int insertIndex = interval;
+        positions.sort(Integer::compareTo);
+        int inserted = 0;
         int adIndex = 0;
-        while (insertIndex < cards.size() && adIndex < ads.size()) {
+        for (int i = 0; i < positions.size() && adIndex < ads.size(); i++) {
+            int pos = positions.get(i);
+            int insertIndex = Math.min(pos + inserted, cards.size());
             ContentAdDO ad = ads.get(adIndex++);
             FeedCardBO adCard = new FeedCardBO();
             adCard.setCardType(FeedCardBO.CardType.AD);
@@ -179,17 +207,69 @@ public class ContentFeedService {
             adCard.setLayout(resolveAdLayout(ad));
             adCard.setStrategy("ad_slot");
             cards.add(insertIndex, adCard);
-            insertIndex += interval + ThreadLocalDelta.randomDelta();
+            inserted++;
         }
-        while (adIndex < ads.size()) {
-            ContentAdDO ad = ads.get(adIndex++);
-            FeedCardBO adCard = new FeedCardBO();
-            adCard.setCardType(FeedCardBO.CardType.AD);
-            adCard.setAd(ad);
-            adCard.setLayout(resolveAdLayout(ad));
-            adCard.setStrategy("ad_slot");
-            cards.add(adCard);
+    }
+
+    private long buildAdSeed(Long userId, String scene, int pageNo) {
+        long seed = java.time.LocalDate.now().toEpochDay();
+        seed = seed * 31 + (userId == null ? 0L : userId);
+        seed = seed * 31 + (scene == null ? 0 : scene.hashCode());
+        seed = seed * 31 + pageNo;
+        return seed;
+    }
+
+    private List<Integer> computeAdPositions(int contentSize, int adCount, int interval,
+                                             int firstOffset, int jitterRange, java.util.Random random) {
+        if (adCount <= 0 || contentSize <= 1 || interval <= 0) {
+            return List.of();
         }
+        int minOffset = Math.max(2, firstOffset > 0 ? Math.min(firstOffset, interval) : interval);
+        int maxOffset = Math.max(minOffset, interval);
+        int offset = minOffset + random.nextInt(maxOffset - minOffset + 1);
+        List<Integer> positions = new ArrayList<>();
+        for (int i = 0; i < adCount; i++) {
+            int pos = offset + i * interval + randomJitter(random, jitterRange);
+            pos = Math.min(Math.max(pos, 1), contentSize);
+            int resolved = resolveAdPosition(pos, positions, contentSize);
+            if (resolved >= 1) {
+                positions.add(resolved);
+            }
+        }
+        return positions;
+    }
+
+    private int randomJitter(java.util.Random random, int jitterRange) {
+        if (jitterRange <= 0) {
+            return 0;
+        }
+        return random.nextInt(jitterRange * 2 + 1) - jitterRange;
+    }
+
+    private int resolveAdPosition(int pos, List<Integer> positions, int max) {
+        int candidate = pos;
+        for (int i = 0; i < 3; i++) {
+            if (!hasPositionConflict(candidate, positions)) {
+                return candidate;
+            }
+            if (candidate >= max) {
+                break;
+            }
+            candidate++;
+        }
+        return -1;
+    }
+
+    private boolean hasPositionConflict(int pos, List<Integer> positions) {
+        for (Integer existing : positions) {
+            if (existing == null) {
+                continue;
+            }
+            if (Math.abs(existing - pos) <= 1) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Integer loadRewardAmount(Long contentId) {
@@ -319,11 +399,4 @@ public class ContentFeedService {
         }
     }
 
-    private static final class ThreadLocalDelta {
-        private static final java.util.Random RANDOM = new java.util.Random();
-
-        private static int randomDelta() {
-            return RANDOM.nextInt(2);
-        }
-    }
 }

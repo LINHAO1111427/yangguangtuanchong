@@ -11,5 +11,7 @@ public interface CommentService {
 
     CommentRespVO createComment(CommentCreateReqVO createReqVO, Long userId, String ipAddress, String userAgent);
 
+    boolean toggleLike(Long commentId, Long userId, String ipAddress, String userAgent);
+
     void deleteComment(Long commentId, Long operatorUserId);
 }

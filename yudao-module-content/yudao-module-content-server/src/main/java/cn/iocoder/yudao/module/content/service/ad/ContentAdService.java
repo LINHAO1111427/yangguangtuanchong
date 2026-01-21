@@ -1,6 +1,8 @@
 package cn.iocoder.yudao.module.content.service.ad;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.content.controller.admin.ad.vo.ContentAdPageReqVO;
 import cn.iocoder.yudao.module.content.dal.dataobject.ContentAdDO;
 import cn.iocoder.yudao.module.content.dal.mysql.ContentAdMapper;
 import jakarta.annotation.Resource;
@@ -16,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 内容流广告服务，负责广告的读取与频控。
@@ -25,11 +26,20 @@ import java.util.concurrent.ThreadLocalRandom;
 public class ContentAdService {
 
     private static final Logger log = LoggerFactory.getLogger(ContentAdService.class);
+    private static final int SCENE_CAP_MULTIPLIER = 10;
+    private static final int MIN_SCENE_DAILY_CAP = 20;
+    private static final int VIDEO_SCENE_DAILY_CAP = 12;
+    private static final double VIDEO_MEDIA_BOOST = 1.5;
+    private static final double FRESHNESS_BOOST = 1.2;
+    private static final int FRESHNESS_HOURS = 24;
 
     private final Map<String, Integer> exposureCounter = new ConcurrentHashMap<>();
+    private final Map<String, Integer> sceneExposureCounter = new ConcurrentHashMap<>();
 
     @Resource
     private ContentAdMapper contentAdMapper;
+    @Resource
+    private ContentAdEventService contentAdEventService;
 
     /**
      * 读取有效广告列表。
@@ -47,6 +57,11 @@ public class ContentAdService {
         return ads;
     }
 
+    public List<ContentAdDO> pickAds(Long userId, Integer scene, int maxCount) {
+        long seed = System.currentTimeMillis() ^ (userId == null ? 0L : userId);
+        return pickAds(userId, scene, maxCount, seed, false);
+    }
+
     /**
      * 为用户挑选广告，自动处理频控。
      *
@@ -54,22 +69,37 @@ public class ContentAdService {
      * @param scene    场景
      * @param maxCount 最大返回条数
      */
-    public List<ContentAdDO> pickAds(Long userId, Integer scene, int maxCount) {
+    public List<ContentAdDO> pickAds(Long userId, Integer scene, int maxCount, long seed, boolean videoScene) {
         List<ContentAdDO> ads = getActiveAds(scene);
         if (CollUtil.isEmpty(ads) || maxCount <= 0) {
             return List.of();
         }
-        List<ContentAdDO> result = new ArrayList<>();
-        int randomSeed = ThreadLocalRandom.current().nextInt(100);
+        int sceneCap = resolveSceneCap(scene, maxCount, videoScene);
+        if (!canExposeScene(userId, scene, sceneCap)) {
+            return List.of();
+        }
+        java.util.Random random = new java.util.Random(seed);
+        List<AdCandidate> candidates = new ArrayList<>();
         for (ContentAdDO ad : ads) {
-            if (!canExpose(userId, ad, randomSeed)) {
+            if (!canExpose(userId, ad, random.nextInt(100))) {
                 continue;
             }
-            recordExposure(userId, ad);
-            result.add(ad);
-            if (result.size() >= maxCount) {
+            double weight = calcWeight(ad, videoScene);
+            if (weight > 0) {
+                candidates.add(new AdCandidate(ad, weight));
+            }
+        }
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        List<ContentAdDO> result = new ArrayList<>();
+        for (int i = 0; i < maxCount && !candidates.isEmpty(); i++) {
+            ContentAdDO ad = pickWeighted(candidates, random);
+            if (ad == null) {
                 break;
             }
+            recordExposure(userId, ad, scene);
+            result.add(ad);
         }
         return result;
     }
@@ -91,16 +121,89 @@ public class ContentAdService {
         return randomSeed % (shown + 1) == 0;
     }
 
-    private void recordExposure(Long userId, ContentAdDO ad) {
-        if (userId == null || ad == null) {
+    private void recordExposure(Long userId, ContentAdDO ad, Integer scene) {
+        if (ad == null || ad.getId() == null) {
             return;
         }
-        String key = buildExposureKey(userId, ad.getId());
-        exposureCounter.merge(key, 1, Integer::sum);
+        if (userId != null) {
+            String key = buildExposureKey(userId, ad.getId());
+            exposureCounter.merge(key, 1, Integer::sum);
+            if (scene != null) {
+                String sceneKey = buildSceneExposureKey(userId, scene);
+                sceneExposureCounter.merge(sceneKey, 1, Integer::sum);
+            }
+        }
+        contentAdEventService.recordImpression(ad.getId(), userId, scene);
     }
 
     private String buildExposureKey(Long userId, Long adId) {
         return LocalDate.now() + ":" + userId + ":" + adId;
+    }
+
+    private boolean canExposeScene(Long userId, Integer scene, int sceneCap) {
+        if (userId == null || scene == null || sceneCap <= 0) {
+            return true;
+        }
+        String key = buildSceneExposureKey(userId, scene);
+        int shown = sceneExposureCounter.getOrDefault(key, 0);
+        return shown < sceneCap;
+    }
+
+    private String buildSceneExposureKey(Long userId, Integer scene) {
+        return LocalDate.now() + ":" + userId + ":scene:" + scene;
+    }
+
+    private int resolveSceneCap(Integer scene, int maxCount, boolean videoScene) {
+        if (videoScene) {
+            return VIDEO_SCENE_DAILY_CAP;
+        }
+        int base = Math.max(maxCount * SCENE_CAP_MULTIPLIER, MIN_SCENE_DAILY_CAP);
+        return Math.max(base, maxCount);
+    }
+
+    private double calcWeight(ContentAdDO ad, boolean videoScene) {
+        double weight = ad.getPriority() != null && ad.getPriority() > 0 ? ad.getPriority() : 1;
+        if (videoScene && "video".equalsIgnoreCase(ad.getMediaType())) {
+            weight *= VIDEO_MEDIA_BOOST;
+        }
+        if (ad.getStartTime() != null) {
+            long hours = java.time.Duration.between(ad.getStartTime(), LocalDateTime.now()).toHours();
+            if (hours >= 0 && hours <= FRESHNESS_HOURS) {
+                weight *= FRESHNESS_BOOST;
+            }
+        }
+        return weight;
+    }
+
+    private ContentAdDO pickWeighted(List<AdCandidate> candidates, java.util.Random random) {
+        double total = 0;
+        for (AdCandidate candidate : candidates) {
+            total += candidate.weight;
+        }
+        if (total <= 0) {
+            return null;
+        }
+        double hit = random.nextDouble() * total;
+        double current = 0;
+        for (int i = 0; i < candidates.size(); i++) {
+            AdCandidate candidate = candidates.get(i);
+            current += candidate.weight;
+            if (hit <= current) {
+                candidates.remove(i);
+                return candidate.ad;
+            }
+        }
+        return null;
+    }
+
+    private static final class AdCandidate {
+        private final ContentAdDO ad;
+        private final double weight;
+
+        private AdCandidate(ContentAdDO ad, double weight) {
+            this.ad = ad;
+            this.weight = weight;
+        }
     }
 
     public ContentAdDO getAd(Long id) {
@@ -130,5 +233,21 @@ public class ContentAdService {
             return;
         }
         contentAdMapper.deleteById(id);
+    }
+
+    public PageResult<ContentAdDO> getAdPage(ContentAdPageReqVO reqVO) {
+        return contentAdMapper.selectPage(reqVO);
+    }
+
+    public void updateAdStatus(Long id, Integer status) {
+        if (id == null || status == null) {
+            return;
+        }
+        ContentAdDO ad = contentAdMapper.selectById(id);
+        if (ad == null) {
+            return;
+        }
+        ad.setStatus(status);
+        contentAdMapper.updateById(ad);
     }
 }

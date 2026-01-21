@@ -120,6 +120,9 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void validateSendReq(MessageSendReqVO reqVO) {
+        if (reqVO == null || reqVO.getToUserId() == null) {
+            throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_TARGET_REQUIRED);
+        }
         Integer type = reqVO.getType();
         if (type == null) {
             throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_TYPE_INVALID);

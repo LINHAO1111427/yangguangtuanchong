@@ -5,9 +5,12 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.content.controller.app.ad.vo.AppAdCreateReqVO;
 import cn.iocoder.yudao.module.content.controller.app.ad.vo.AppAdDetailRespVO;
 import cn.iocoder.yudao.module.content.controller.app.ad.vo.AppAdRespVO;
+import cn.iocoder.yudao.module.content.controller.app.ad.vo.AppAdStatRespVO;
 import cn.iocoder.yudao.module.content.controller.app.ad.vo.AppAdUpdateReqVO;
+import cn.iocoder.yudao.module.content.controller.admin.ad.vo.ContentAdStatSummaryRespVO;
 import cn.iocoder.yudao.module.content.dal.dataobject.ContentAdDO;
 import cn.iocoder.yudao.module.content.enums.ErrorCodeConstants;
+import cn.iocoder.yudao.module.content.service.ad.ContentAdEventService;
 import cn.iocoder.yudao.module.content.service.ad.ContentAdService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -49,6 +52,8 @@ public class AppAdController {
 
     @Resource
     private ContentAdService contentAdService;
+    @Resource
+    private ContentAdEventService contentAdEventService;
 
     @GetMapping("/list")
     @PermitAll
@@ -81,7 +86,31 @@ public class AppAdController {
     @Operation(summary = "上报广告点击")
     public CommonResult<Boolean> click(@RequestBody Map<String, Object> body) {
         Object adIdObj = body.get("ad_id");
+        Long adId = null;
+        if (adIdObj instanceof Number number) {
+            adId = number.longValue();
+        } else if (adIdObj instanceof String str) {
+            try {
+                adId = Long.parseLong(str);
+            } catch (NumberFormatException ignored) {
+                adId = null;
+            }
+        }
+        Integer scene = null;
+        Object sceneObj = body.get("scene");
+        if (sceneObj instanceof Number number) {
+            scene = number.intValue();
+        } else if (sceneObj instanceof String str) {
+            try {
+                scene = Integer.parseInt(str);
+            } catch (NumberFormatException ignored) {
+                scene = null;
+            }
+        }
         log.info("[adClick] userId={} adId={}", getLoginUserId(), adIdObj);
+        if (adId != null) {
+            contentAdEventService.recordClick(adId, getLoginUserId(), scene);
+        }
         return success(Boolean.TRUE);
     }
 
@@ -94,6 +123,25 @@ public class AppAdController {
             throw exception(ErrorCodeConstants.AD_NOT_EXISTS);
         }
         return success(convertDetail(ad));
+    }
+
+    @GetMapping("/stats")
+    @Operation(summary = "获取广告统计")
+    @PreAuthorize("isAuthenticated()")
+    public CommonResult<AppAdStatRespVO> getAdStats(
+            @RequestParam("id") Long id,
+            @RequestParam(value = "scene", required = false) Integer scene) {
+        Long userId = getLoginUserId();
+        ContentAdDO ad = contentAdService.getAd(id);
+        if (ad == null || !Objects.equals(ad.getDeleted(), 0)) {
+            throw exception(ErrorCodeConstants.AD_NOT_EXISTS);
+        }
+        Long publisherUserId = getPublisherUserId(ad);
+        if (publisherUserId != null && !Objects.equals(publisherUserId, userId)) {
+            throw exception(ErrorCodeConstants.AD_ACCESS_DENIED);
+        }
+        ContentAdStatSummaryRespVO summary = contentAdEventService.getStatSummary(id, scene, null, null);
+        return success(convertStat(summary));
     }
 
     @PostMapping("/create")
@@ -111,9 +159,13 @@ public class AppAdController {
         ad.setJumpUrl(reqVO.getLink());
         ad.setCallToAction(reqVO.getCallToAction());
         ad.setAdvertiserName(reqVO.getAdvertiserName());
-        ad.setStatus(1);
+        ad.setStatus(0);
         ad.setPriority(reqVO.getPriority() == null ? 0 : reqVO.getPriority());
-        ad.setDisplayScene(reqVO.getScene() == null ? 1 : reqVO.getScene());
+        Integer displayScene = reqVO.getScene();
+        if (displayScene == null || displayScene < 1 || displayScene > 3) {
+            displayScene = 1;
+        }
+        ad.setDisplayScene(displayScene);
         ad.setFrequencyCap(reqVO.getFrequencyCap());
         ad.setStartTime(reqVO.getStartTime());
         ad.setEndTime(reqVO.getEndTime());
@@ -160,8 +212,12 @@ public class AppAdController {
         existing.setJumpUrl(reqVO.getLink());
         existing.setCallToAction(reqVO.getCallToAction());
         existing.setAdvertiserName(reqVO.getAdvertiserName());
+        existing.setStatus(0);
         existing.setPriority(reqVO.getPriority());
-        existing.setDisplayScene(reqVO.getScene());
+        Integer nextScene = reqVO.getScene();
+        if (nextScene != null && nextScene >= 1 && nextScene <= 3) {
+            existing.setDisplayScene(nextScene);
+        }
         existing.setFrequencyCap(reqVO.getFrequencyCap());
         existing.setStartTime(reqVO.getStartTime());
         existing.setEndTime(reqVO.getEndTime());
@@ -208,8 +264,12 @@ public class AppAdController {
         vo.setTitle(ad.getTitle());
         vo.setDesc(ad.getSubTitle());
         vo.setImage(ad.getCoverImage());
+        vo.setCoverImage(ad.getCoverImage());
+        vo.setMediaType(ad.getMediaType());
+        vo.setVideoUrl(ad.getVideoUrl());
         vo.setLink(ad.getJumpUrl());
         vo.setScene(ad.getDisplayScene());
+        vo.setCategoryName(getStyleMetaString(ad, "categoryName"));
         vo.setPriority(ad.getPriority());
         return vo;
     }
@@ -235,6 +295,19 @@ public class AppAdController {
         vo.setPublisherUserId(getPublisherUserId(ad));
         vo.setCategoryName(getStyleMetaString(ad, "categoryName"));
         vo.setTargetLocation(getStyleMetaString(ad, "targetLocation"));
+        return vo;
+    }
+
+    private AppAdStatRespVO convertStat(ContentAdStatSummaryRespVO summary) {
+        AppAdStatRespVO vo = new AppAdStatRespVO();
+        if (summary == null) {
+            return vo;
+        }
+        vo.setImpressionCount(summary.getImpressionCount());
+        vo.setClickCount(summary.getClickCount());
+        vo.setUniqueImpressionCount(summary.getUniqueImpressionCount());
+        vo.setUniqueClickCount(summary.getUniqueClickCount());
+        vo.setRevenue(summary.getRevenue());
         return vo;
     }
 

@@ -47,6 +47,13 @@
                 - Path=/api/v1.0.1/content/**
               filters:
                 - RewritePath=/api/v1.0.1/content/(?<segment>.*), /app-api/content/${segment}
+            ## content-server 服务 (广告接口 /api/v1.0.1/ad/**)
+            - id: xiaolvshu-ad-api
+              uri: grayLb://content-server
+              predicates:
+                - Path=/api/v1.0.1/ad/**
+              filters:
+                - RewritePath=/api/v1.0.1/ad/(?<segment>.*), /app-api/ad/${segment}
             ## content-server 兼容旧版 /api/v1.0.1/topic/**
             - id: xiaolvshu-content-topic-api
               uri: grayLb://content-server

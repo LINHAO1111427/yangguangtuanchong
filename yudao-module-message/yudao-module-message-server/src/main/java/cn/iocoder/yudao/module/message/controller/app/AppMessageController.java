@@ -6,6 +6,7 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppConversationPageReqVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppConversationRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppMessagePageReqVO;
+import cn.iocoder.yudao.module.message.controller.app.vo.AppMessagePermissionRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppMessagePackageRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppMessageRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppNotificationPageReqVO;
@@ -15,7 +16,6 @@ import cn.iocoder.yudao.module.message.controller.app.vo.AppSuggestedFriendRespV
 import cn.iocoder.yudao.module.message.controller.app.vo.MessageSendReqVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.integration.AppTencentIntegrationStatusRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.integration.AppTencentRtcSignatureRespVO;
-import cn.iocoder.yudao.module.message.enums.ErrorCodeConstants;
 import cn.iocoder.yudao.module.message.service.AppMessageService;
 import cn.iocoder.yudao.module.message.service.ConversationService;
 import cn.iocoder.yudao.module.message.service.MessageService;
@@ -107,18 +107,20 @@ public class AppMessageController {
 
     @PostMapping("/private/send")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "发送私聊消息")
+    @Operation(summary = "Send private message")
     public CommonResult<AppMessagePackageRespVO> sendPrivateMessage(@Valid @RequestBody MessageSendReqVO reqVO) {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
-        try {
-            AppMessagePackageRespVO respVO = appMessageService.sendPrivateMessage(userId, reqVO);
-            return CommonResult.success(respVO);
-        } catch (cn.iocoder.yudao.framework.common.exception.ServiceException ex) {
-            if (ErrorCodeConstants.CONVERSATION_PERMISSION_DENIED.getCode().equals(ex.getCode())) {
-                return CommonResult.error(ErrorCodeConstants.CONVERSATION_PERMISSION_DENIED.getCode(), "请先互相关注再发送私信");
-            }
-            throw ex;
-        }
+        AppMessagePackageRespVO respVO = appMessageService.sendPrivateMessage(userId, reqVO);
+        return CommonResult.success(respVO);
+    }
+
+    @GetMapping("/private/permission")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get private message permission")
+    public CommonResult<AppMessagePermissionRespVO> getPrivateMessagePermission(
+            @RequestParam("targetUserId") Long targetUserId) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        return CommonResult.success(appMessageService.getPrivateMessagePermission(userId, targetUserId));
     }
 
     @GetMapping("/private/conversation")

@@ -10,6 +10,7 @@ import cn.iocoder.yudao.module.content.controller.app.vo.ContentUpdateReqVO;
 import cn.iocoder.yudao.module.content.dal.dataobject.ContentDO;
 
 import jakarta.validation.Valid;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -114,6 +115,14 @@ public interface ContentService {
      * @return 浏览历史分页
      */
     PageResult<ContentListRespVO> getMyViewHistory(Long userId, ContentPageReqVO pageReqVO);
+
+    /**
+     * 删除指定浏览历史
+     *
+     * @param userId     用户ID
+     * @param contentIds 内容ID列表
+     */
+    void deleteMyViewHistory(Long userId, Collection<Long> contentIds);
 
     /**
      * 清空浏览历史

@@ -60,6 +60,14 @@ public interface NotificationMapper extends BaseMapperX<NotificationDO> {
         update(null, wrapper);
     }
 
+    default void markAsDeletedByAdmin(Long notificationId) {
+        UpdateWrapper<NotificationDO> wrapper = new UpdateWrapper<>();
+        wrapper.eq("id", notificationId)
+                .set("deleted", 1)
+                .set("update_time", LocalDateTime.now());
+        update(null, wrapper);
+    }
+
     default void clearAll(Long userId, Integer type) {
         UpdateWrapper<NotificationDO> wrapper = new UpdateWrapper<>();
         wrapper.eq("user_id", userId);

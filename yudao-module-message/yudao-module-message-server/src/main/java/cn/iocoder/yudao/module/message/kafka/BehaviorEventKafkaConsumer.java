@@ -25,7 +25,7 @@ import java.util.Set;
  * Topic: behavior-event
  *
  * Payload(JSON):
- * - behaviorType: like/collect/comment/follow
+ * - behaviorType: like/collect/comment/comment_like/follow
  * - action: add/cancel
  * - actorUserId
  * - contentId (like/collect/comment 必填)
@@ -142,7 +142,8 @@ public class BehaviorEventKafkaConsumer {
 
     private int resolveNotifyType(String behaviorType) {
         return switch (behaviorType) {
-            case MessageConstants.BehaviorType.LIKE, MessageConstants.BehaviorType.COLLECT -> MessageConstants.NotificationType.LIKE;
+            case MessageConstants.BehaviorType.LIKE, MessageConstants.BehaviorType.COLLECT,
+                    MessageConstants.BehaviorType.COMMENT_LIKE -> MessageConstants.NotificationType.LIKE;
             case MessageConstants.BehaviorType.COMMENT -> MessageConstants.NotificationType.COMMENT;
             case MessageConstants.BehaviorType.FOLLOW -> MessageConstants.NotificationType.FOLLOW;
             default -> MessageConstants.NotificationType.SYSTEM;
@@ -152,6 +153,7 @@ public class BehaviorEventKafkaConsumer {
     private String buildTitle(String behaviorType) {
         return switch (behaviorType) {
             case MessageConstants.BehaviorType.COMMENT -> "收到新评论";
+            case MessageConstants.BehaviorType.COMMENT_LIKE -> "评论获赞";
             case MessageConstants.BehaviorType.FOLLOW -> "新增关注";
             case MessageConstants.BehaviorType.COLLECT -> "收到收藏";
             case MessageConstants.BehaviorType.LIKE -> "收到点赞";

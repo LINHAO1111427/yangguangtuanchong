@@ -160,23 +160,25 @@ public class AppMemberUserController {
 
         // 获取社交统计数据
         AppMemberUserProfileRespVO.Stats stats = new AppMemberUserProfileRespVO.Stats();
-        stats.setFollowingCount(friendRelationMapper.selectCount(
-                new LambdaQueryWrapper<MemberFriendRelationDO>()
-                        .eq(MemberFriendRelationDO::getUserId, userId)
-                        .eq(MemberFriendRelationDO::getState, 1)));
-        stats.setFollowersCount(friendRelationMapper.selectCount(
-                new LambdaQueryWrapper<MemberFriendRelationDO>()
-                        .eq(MemberFriendRelationDO::getFriendId, userId)
-                        .eq(MemberFriendRelationDO::getState, 1)));
         stats.setFriendsCount(defaultLong(friendRelationMapper.selectMutualFriendCount(userId)));
         ContentUserStatsRespDTO contentStats = loadContentStats(userId);
         if (contentStats != null) {
+            stats.setFollowingCount(defaultLong(contentStats.getFollowingCount()));
+            stats.setFollowersCount(defaultLong(contentStats.getFollowersCount()));
             stats.setLikesCount(defaultLong(contentStats.getTotalLikeCount()));
             stats.setWorksCount(defaultLong(contentStats.getWorkCount()));
             stats.setWishlistCount(defaultLong(contentStats.getTotalCollectCount()));
             stats.setFootprintCount(defaultLong(contentStats.getTotalViewCount()));
             stats.setCommentCount(defaultLong(contentStats.getTotalCommentCount()));
         } else {
+            stats.setFollowingCount(friendRelationMapper.selectCount(
+                    new LambdaQueryWrapper<MemberFriendRelationDO>()
+                            .eq(MemberFriendRelationDO::getUserId, userId)
+                            .eq(MemberFriendRelationDO::getState, 1)));
+            stats.setFollowersCount(friendRelationMapper.selectCount(
+                    new LambdaQueryWrapper<MemberFriendRelationDO>()
+                            .eq(MemberFriendRelationDO::getFriendId, userId)
+                            .eq(MemberFriendRelationDO::getState, 1)));
             stats.setLikesCount(0L);
             stats.setWorksCount(0L);
             stats.setWishlistCount(0L);

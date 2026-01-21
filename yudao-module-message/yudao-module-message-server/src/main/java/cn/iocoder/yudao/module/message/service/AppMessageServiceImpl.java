@@ -5,28 +5,35 @@ import cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.content.api.ContentApi;
 import cn.iocoder.yudao.module.content.api.dto.ContentRespDTO;
+import cn.iocoder.yudao.module.content.api.follow.FollowApi;
+import cn.iocoder.yudao.module.member.api.social.MemberRelationApi;
+import cn.iocoder.yudao.module.member.api.social.dto.MemberRelationRespDTO;
 import cn.iocoder.yudao.module.member.api.user.MemberUserApi;
 import cn.iocoder.yudao.module.member.api.user.dto.MemberUserRespDTO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppConversationPageReqVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppConversationRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppMessagePageReqVO;
+import cn.iocoder.yudao.module.message.controller.app.vo.AppMessagePermissionRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppMessagePackageRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppMessageRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppNotificationPageReqVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.AppNotificationRespVO;
 import cn.iocoder.yudao.module.message.controller.app.vo.MessageSendReqVO;
+import cn.iocoder.yudao.module.message.constants.MessageConstants;
 import cn.iocoder.yudao.module.message.convert.AppMessageConvert;
 import cn.iocoder.yudao.module.message.dal.dataobject.ConversationDO;
 import cn.iocoder.yudao.module.message.dal.dataobject.MessagePrivateDO;
 import cn.iocoder.yudao.module.message.dal.dataobject.NotificationDO;
-import cn.iocoder.yudao.module.content.api.follow.FollowApi;
+import cn.iocoder.yudao.module.message.dal.mapper.MessagePrivateMapper;
 import cn.iocoder.yudao.module.message.websocket.MessageWebSocketSessionManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +43,11 @@ import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.CONVERSATION_PERMISSION_DENIED;
 import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.MESSAGE_NOT_EXISTS;
+import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.MESSAGE_SEND_NOT_ALLOWED;
+import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.PRIVATE_MESSAGE_BLOCKED;
+import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.PRIVATE_MESSAGE_STRANGER_LIMIT;
+import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.PRIVATE_MESSAGE_STRANGER_ONLY_TEXT;
+import static cn.iocoder.yudao.module.message.enums.ErrorCodeConstants.PRIVATE_MESSAGE_TARGET_REQUIRED;
 import static java.util.function.Function.identity;
 
 /**
@@ -47,10 +59,15 @@ import static java.util.function.Function.identity;
 @Slf4j
 public class AppMessageServiceImpl implements AppMessageService {
 
+    private static final int STRANGER_LIMIT_HOURS = 24;
+    private static final String STRANGER_TIP = "对方关注或回复你之前，24小时内最多只能发送1条文字消息";
+
     @Resource
     private ConversationService conversationService;
     @Resource
     private MessageService messageService;
+    @Resource
+    private MessagePrivateMapper messagePrivateMapper;
     @Resource
     private NotificationService notificationService;
     @Resource
@@ -59,6 +76,8 @@ public class AppMessageServiceImpl implements AppMessageService {
     private ContentApi contentApi;
     @Resource
     private MessageWebSocketSessionManager sessionManager;
+    @Resource
+    private MemberRelationApi memberRelationApi;
     @Resource
     private FollowApi followApi;
 
@@ -93,17 +112,18 @@ public class AppMessageServiceImpl implements AppMessageService {
 
     @Override
     public PageResult<AppMessageRespVO> getConversationMessages(Long userId, AppMessagePageReqVO reqVO) {
-        ConversationDO conversation = conversationService.getConversationByTarget(userId, reqVO.getTargetUserId());
+        Long targetUserId = resolveTargetUserId(userId, reqVO);
+        ConversationDO conversation = conversationService.getConversationByTarget(userId, targetUserId);
         if (conversation == null) {
             return PageResult.empty();
         }
         PageResult<MessagePrivateDO> pageResult =
-                messageService.getConversationMessages(userId, reqVO.getTargetUserId(), reqVO);
+                messageService.getConversationMessages(userId, targetUserId, reqVO);
         if (CollUtil.isEmpty(pageResult.getList())) {
             return PageResult.empty(pageResult.getTotal());
         }
         Set<Long> memberIds = new HashSet<>();
-        memberIds.add(reqVO.getTargetUserId());
+        memberIds.add(targetUserId);
         memberIds.add(userId);
         pageResult.getList().forEach(message -> {
             memberIds.add(message.getFromUserId());
@@ -119,10 +139,81 @@ public class AppMessageServiceImpl implements AppMessageService {
 
     @Override
     public AppMessagePackageRespVO sendPrivateMessage(Long userId, MessageSendReqVO reqVO) {
-        Long targetUserId = reqVO.getToUserId();
-        if (targetUserId != null && !Boolean.TRUE.equals(followApi.isFollowingUser(targetUserId, userId).getCheckedData())) {
-            throw ServiceExceptionUtil.exception(CONVERSATION_PERMISSION_DENIED);
+        Long targetUserId = resolveTargetUserId(userId, reqVO);
+        if (targetUserId != null) {
+            MessagePermission permission = resolvePermission(userId, targetUserId);
+            if (permission.blockedByTarget) {
+                throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_BLOCKED);
+            }
+            if (permission.blockedByMe) {
+                throw ServiceExceptionUtil.exception(MESSAGE_SEND_NOT_ALLOWED);
+            }
+            if (permission.limitActive) {
+                if (!Objects.equals(reqVO.getType(), MessageConstants.ChatMessageType.TEXT)) {
+                    throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_STRANGER_ONLY_TEXT);
+                }
+                if (permission.remainingTextCount <= 0) {
+                    throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_STRANGER_LIMIT);
+                }
+            }
         }
+        return buildSendResult(userId, reqVO);
+    }
+
+    private Long resolveTargetUserId(Long userId, AppMessagePageReqVO reqVO) {
+        if (reqVO == null) {
+            throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_TARGET_REQUIRED);
+        }
+        Long targetUserId = reqVO.getTargetUserId();
+        if (targetUserId != null) {
+            return targetUserId;
+        }
+        Long conversationId = reqVO.getConversationId();
+        if (conversationId != null) {
+            ConversationDO conversation = conversationService.getConversation(conversationId, userId);
+            if (conversation != null && conversation.getTargetId() != null) {
+                reqVO.setTargetUserId(conversation.getTargetId());
+                return conversation.getTargetId();
+            }
+        }
+        throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_TARGET_REQUIRED);
+    }
+
+    private Long resolveTargetUserId(Long userId, MessageSendReqVO reqVO) {
+        if (reqVO == null) {
+            throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_TARGET_REQUIRED);
+        }
+        Long targetUserId = reqVO.getToUserId();
+        if (targetUserId != null) {
+            return targetUserId;
+        }
+        Long conversationId = reqVO.getConversationId();
+        if (conversationId != null) {
+            ConversationDO conversation = conversationService.getConversation(conversationId, userId);
+            if (conversation != null && conversation.getTargetId() != null) {
+                reqVO.setToUserId(conversation.getTargetId());
+                return conversation.getTargetId();
+            }
+        }
+        throw ServiceExceptionUtil.exception(PRIVATE_MESSAGE_TARGET_REQUIRED);
+    }
+
+    @Override
+    public AppMessagePermissionRespVO getPrivateMessagePermission(Long userId, Long targetUserId) {
+        MessagePermission permission = resolvePermission(userId, targetUserId);
+        AppMessagePermissionRespVO resp = new AppMessagePermissionRespVO();
+        resp.setLimitHours(STRANGER_LIMIT_HOURS);
+        boolean blocked = permission.blockedByMe || permission.blockedByTarget;
+        boolean limitActive = !blocked && permission.limitActive;
+        resp.setLimitActive(limitActive);
+        resp.setTextOnly(limitActive);
+        resp.setRemainingTextCount(limitActive ? permission.remainingTextCount : null);
+        resp.setTip(limitActive ? STRANGER_TIP : null);
+        resp.setCanSend(!blocked && (!limitActive || permission.remainingTextCount > 0));
+        return resp;
+    }
+
+    private AppMessagePackageRespVO buildSendResult(Long userId, MessageSendReqVO reqVO) {
         Long messageId = messageService.sendPrivateMessage(userId, reqVO);
         MessagePrivateDO message = messageService.getMessage(messageId);
         ConversationDO conversation = conversationService.getConversationByTarget(userId, reqVO.getToUserId());
@@ -134,6 +225,57 @@ public class AppMessageServiceImpl implements AppMessageService {
                 sessionManager.isUserOnline(reqVO.getToUserId()));
         AppMessageRespVO messageVO = AppMessageConvert.buildMessage(message, conversation, memberMap, userId);
         return AppMessageConvert.buildPackage(conversationVO, messageVO);
+    }
+
+    private MessagePermission resolvePermission(Long userId, Long targetUserId) {
+        MessagePermission permission = new MessagePermission();
+        if (userId == null || targetUserId == null || Objects.equals(userId, targetUserId)) {
+            return permission;
+        }
+        MemberRelationRespDTO relation = loadRelation(userId, targetUserId);
+        if (relation != null) {
+            permission.blockedByTarget = Boolean.TRUE.equals(relation.getBlockedMe());
+            permission.blockedByMe = Boolean.TRUE.equals(relation.getBlockedByMe());
+            permission.mutualFollow = Boolean.TRUE.equals(relation.getMutualFollow());
+        }
+        Boolean following = fetchFollowing(userId, targetUserId);
+        Boolean followedBy = fetchFollowing(targetUserId, userId);
+        if (following != null && followedBy != null) {
+            permission.mutualFollow = following && followedBy;
+        }
+        if (permission.mutualFollow) {
+            return permission;
+        }
+        permission.replied = messagePrivateMapper.existsReply(targetUserId, userId);
+        if (permission.replied) {
+            return permission;
+        }
+        permission.limitActive = true;
+        LocalDateTime since = LocalDateTime.now().minusHours(STRANGER_LIMIT_HOURS);
+        Long count = messagePrivateMapper.countRecentMessages(userId, targetUserId,
+                MessageConstants.ChatMessageType.TEXT, since);
+        permission.remainingTextCount = count != null && count > 0 ? 0 : 1;
+        return permission;
+    }
+
+    private MemberRelationRespDTO loadRelation(Long userId, Long targetUserId) {
+        try {
+            return memberRelationApi.getRelation(userId, targetUserId).getCheckedData();
+        } catch (Exception ex) {
+            log.warn("Load relation summary failed: userId={}, targetUserId={}, reason={}",
+                    userId, targetUserId, ex.getMessage());
+            return null;
+        }
+    }
+
+    private Boolean fetchFollowing(Long followerId, Long targetId) {
+        try {
+            return followApi.isFollowingUser(followerId, targetId).getCheckedData();
+        } catch (Exception ex) {
+            log.warn("Load follow state failed: followerId={}, targetId={}, reason={}",
+                    followerId, targetId, ex.getMessage());
+            return null;
+        }
     }
 
     @Override
@@ -272,13 +414,40 @@ public class AppMessageServiceImpl implements AppMessageService {
         if (CollUtil.isEmpty(userIds)) {
             return Collections.emptyMap();
         }
+        Map<Long, MemberUserRespDTO> map = new HashMap<>();
         try {
-            Map<Long, MemberUserRespDTO> map = memberUserApi.getUserMap(userIds);
-            return map != null ? map : Collections.emptyMap();
+            Map<Long, MemberUserRespDTO> fetched = memberUserApi.getUserMap(userIds);
+            if (fetched != null) {
+                map.putAll(fetched);
+            }
         } catch (Exception e) {
             log.warn("Load member users failed, ids={}", userIds, e);
-            return Collections.emptyMap();
         }
+        if (map.size() < userIds.size()) {
+            for (Long userId : userIds) {
+                if (userId == null || map.containsKey(userId)) {
+                    continue;
+                }
+                try {
+                    MemberUserRespDTO user = memberUserApi.getUser(userId).getCheckedData();
+                    if (user != null) {
+                        map.put(userId, user);
+                    }
+                } catch (Exception ex) {
+                    log.warn("Load member user failed: userId={}, reason={}", userId, ex.getMessage());
+                }
+            }
+        }
+        return map;
+    }
+
+    private static class MessagePermission {
+        private boolean blockedByTarget;
+        private boolean blockedByMe;
+        private boolean mutualFollow;
+        private boolean replied;
+        private boolean limitActive;
+        private int remainingTextCount;
     }
 
 }

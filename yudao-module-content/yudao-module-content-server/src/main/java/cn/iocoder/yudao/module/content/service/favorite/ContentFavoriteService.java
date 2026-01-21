@@ -128,7 +128,8 @@ public class ContentFavoriteService {
             return false;
         }
         ContentFavoriteRecordDO record = recordMapper.selectOne(userId, reqBO.getContentId());
-        if (record != null && !Boolean.TRUE.equals(record.getDeleted())) {
+        Integer deleted = record != null ? record.getDeleted() : null;
+        if (record != null && (deleted == null || deleted == 0)) {
             record.setDeleted(1);
             record.setUpdateTime(LocalDateTime.now());
             recordMapper.updateById(record);

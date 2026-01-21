@@ -32,7 +32,7 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
 @Tag(name = "用户 App - 文件存储")
 @RestController
-@RequestMapping("/app-api/infra/file")
+@RequestMapping("/infra/file")
 @Validated
 @Slf4j
 public class AppFileController {

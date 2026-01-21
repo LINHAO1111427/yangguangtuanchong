@@ -82,6 +82,17 @@ public class AppCommentController {
         return success(respVO);
     }
 
+    @PostMapping("/like")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Toggle comment like")
+    public CommonResult<Boolean> toggleLike(@RequestParam("comment_id") @NotNull Long commentId,
+                                            HttpServletRequest request) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        boolean liked = commentService.toggleLike(commentId, userId,
+                ServletUtils.getClientIP(request), request.getHeader("User-Agent"));
+        return success(liked);
+    }
+
     @PostMapping("/create")
     @Deprecated
     @PreAuthorize("isAuthenticated()")

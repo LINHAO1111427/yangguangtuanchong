@@ -16,6 +16,12 @@ public class ContentAuthorProfileRespVO {
     @Schema(description = "作者头像")
     private String avatar;
 
+    @Schema(description = "小绿薯号", example = "10001")
+    private String customId;
+
+    @Schema(description = "背景图")
+    private String backgroundUrl;
+
     @Schema(description = "作者积分", example = "520")
     private Integer point;
 
@@ -71,6 +77,22 @@ public class ContentAuthorProfileRespVO {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public String getCustomId() {
+        return customId;
+    }
+
+    public void setCustomId(String customId) {
+        this.customId = customId;
+    }
+
+    public String getBackgroundUrl() {
+        return backgroundUrl;
+    }
+
+    public void setBackgroundUrl(String backgroundUrl) {
+        this.backgroundUrl = backgroundUrl;
     }
 
     public Integer getPoint() {

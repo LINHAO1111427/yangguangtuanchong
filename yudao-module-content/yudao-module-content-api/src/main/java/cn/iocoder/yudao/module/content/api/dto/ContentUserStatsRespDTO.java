@@ -15,6 +15,8 @@ public class ContentUserStatsRespDTO implements Serializable {
     private Long totalCommentCount;
     private Long totalCollectCount;
     private Long totalViewCount;
+    private Long followingCount;
+    private Long followersCount;
 
     public Long getUserId() {
         return userId;
@@ -62,5 +64,21 @@ public class ContentUserStatsRespDTO implements Serializable {
 
     public void setTotalViewCount(Long totalViewCount) {
         this.totalViewCount = totalViewCount;
+    }
+
+    public Long getFollowingCount() {
+        return followingCount;
+    }
+
+    public void setFollowingCount(Long followingCount) {
+        this.followingCount = followingCount;
+    }
+
+    public Long getFollowersCount() {
+        return followersCount;
+    }
+
+    public void setFollowersCount(Long followersCount) {
+        this.followersCount = followersCount;
     }
 }

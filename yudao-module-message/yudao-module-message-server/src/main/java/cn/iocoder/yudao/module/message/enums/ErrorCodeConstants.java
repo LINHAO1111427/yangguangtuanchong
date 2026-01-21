@@ -55,6 +55,9 @@ public interface ErrorCodeConstants {
     ErrorCode PRIVATE_MESSAGE_MEDIA_REQUIRED = new ErrorCode(14003005, "媒体内容不能为空");
     ErrorCode PRIVATE_MESSAGE_CARD_REQUIRED = new ErrorCode(14003006, "分享卡片内容不能为空");
     ErrorCode PRIVATE_MESSAGE_TYPE_INVALID = new ErrorCode(14003007, "消息类型无效");
+    ErrorCode PRIVATE_MESSAGE_STRANGER_LIMIT = new ErrorCode(14003008, "对方关注或回复你之前，24小时内最多只能发送1条文字消息");
+    ErrorCode PRIVATE_MESSAGE_STRANGER_ONLY_TEXT = new ErrorCode(14003009, "对方关注或回复你之前，只能发送文字消息");
+    ErrorCode PRIVATE_MESSAGE_TARGET_REQUIRED = new ErrorCode(14003014, "对端用户编号不能为空");
     ErrorCode CONVERSATION_NOT_EXISTS = new ErrorCode(14003010, "会话不存在");
     ErrorCode CONVERSATION_PERMISSION_DENIED = new ErrorCode(14003011, "您无权操作该会话");
     ErrorCode CONVERSATION_TOP_INVALID = new ErrorCode(14003012, "置顶参数无效");

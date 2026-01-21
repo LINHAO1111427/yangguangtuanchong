@@ -35,6 +35,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Set;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -55,6 +56,11 @@ public class AppContentMediaController {
             "video/x-matroska",
             "video/mpeg",
             "video/webm"
+    );
+    private static final Set<String> PROXY_ALLOWED_HOSTS = Set.of(
+            "127.0.0.1",
+            "localhost",
+            "minio"
     );
 
     @Resource
@@ -129,7 +135,8 @@ public class AppContentMediaController {
             return;
         }
         String host = uri.getHost();
-        if (!"127.0.0.1".equals(host) && !"localhost".equalsIgnoreCase(host)) {
+        String normalizedHost = host != null ? host.toLowerCase(Locale.ROOT) : null;
+        if (normalizedHost == null || !PROXY_ALLOWED_HOSTS.contains(normalizedHost)) {
             response.sendError(403, "host not allowed");
             return;
         }

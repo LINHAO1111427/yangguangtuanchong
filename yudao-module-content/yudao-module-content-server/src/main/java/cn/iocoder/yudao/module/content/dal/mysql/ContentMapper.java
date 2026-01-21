@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
+import cn.iocoder.yudao.module.content.controller.admin.content.vo.ContentPostPageReqVO;
 import cn.iocoder.yudao.module.content.controller.app.vo.ContentPageReqVO;
 import cn.iocoder.yudao.module.content.dal.dataobject.ContentDO;
 import cn.iocoder.yudao.module.content.service.vo.ContentAuthorStats;
@@ -21,6 +22,10 @@ public interface ContentMapper extends BaseMapperX<ContentDO> {
 
     default PageResult<ContentDO> selectPage(ContentPageReqVO reqVO) {
         return selectPage(reqVO, buildPageWrapper(reqVO));
+    }
+
+    default PageResult<ContentDO> selectAdminPage(ContentPostPageReqVO reqVO) {
+        return selectPage(reqVO, buildAdminPageWrapper(reqVO));
     }
 
     default List<ContentDO> selectListByIds(Collection<Long> ids) {
@@ -157,6 +162,59 @@ public interface ContentMapper extends BaseMapperX<ContentDO> {
             });
         }
 
+        return wrapper;
+    }
+
+    default LambdaQueryWrapperX<ContentDO> buildAdminPageWrapper(ContentPostPageReqVO reqVO) {
+        LambdaQueryWrapperX<ContentDO> wrapper = new LambdaQueryWrapperX<>();
+        wrapper.eq(ContentDO::getDeleted, 0);
+
+        if (reqVO.getUserId() != null) {
+            wrapper.eq(ContentDO::getUserId, reqVO.getUserId());
+        }
+        if (reqVO.getPublishTopicId() != null) {
+            wrapper.eq(ContentDO::getPublishTopicId, reqVO.getPublishTopicId());
+        }
+        if (reqVO.getChannelId() != null) {
+            wrapper.eq(ContentDO::getChannelId, reqVO.getChannelId());
+        }
+        if (reqVO.getContentType() != null) {
+            wrapper.eq(ContentDO::getContentType, reqVO.getContentType());
+        }
+        if (reqVO.getAuditStatus() != null) {
+            wrapper.eq(ContentDO::getAuditStatus, reqVO.getAuditStatus());
+        }
+        if (reqVO.getStatus() != null) {
+            wrapper.eq(ContentDO::getStatus, reqVO.getStatus());
+        }
+        if (reqVO.getIsPublic() != null) {
+            wrapper.eq(ContentDO::getIsPublic, reqVO.getIsPublic());
+        }
+        if (reqVO.getIsTop() != null) {
+            wrapper.eq(ContentDO::getIsTop, reqVO.getIsTop());
+        }
+        if (reqVO.getIsHot() != null) {
+            wrapper.eq(ContentDO::getIsHot, reqVO.getIsHot());
+        }
+        if (reqVO.getIsRecommend() != null) {
+            wrapper.eq(ContentDO::getIsRecommend, reqVO.getIsRecommend());
+        }
+        if (reqVO.getCreateTime() != null && reqVO.getCreateTime().length == 2) {
+            wrapper.between(ContentDO::getCreateTime, reqVO.getCreateTime()[0], reqVO.getCreateTime()[1]);
+        }
+
+        if (StrUtil.isNotBlank(reqVO.getTitle())) {
+            wrapper.like(ContentDO::getTitle, reqVO.getTitle());
+        }
+        if (StrUtil.isNotBlank(reqVO.getKeyword())) {
+            String keyword = reqVO.getKeyword();
+            wrapper.and(w -> {
+                w.like(ContentDO::getTitle, keyword);
+                w.or();
+                w.like(ContentDO::getContent, keyword);
+            });
+        }
+        wrapper.orderByDesc(ContentDO::getCreateTime);
         return wrapper;
     }
 }

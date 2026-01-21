@@ -6,6 +6,7 @@ import cn.iocoder.yudao.module.content.api.dto.ContentUserStatsRespDTO;
 import cn.iocoder.yudao.module.content.dal.dataobject.ContentDO;
 import cn.iocoder.yudao.module.content.dal.mysql.ContentMapper;
 import cn.iocoder.yudao.module.content.service.ContentService;
+import cn.iocoder.yudao.module.content.service.follow.FollowService;
 import cn.iocoder.yudao.module.content.service.vo.ContentAuthorStats;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,6 +33,8 @@ public class ContentApiImpl implements ContentApi {
     private ContentService contentService;
     @Resource
     private ContentMapper contentMapper;
+    @Resource
+    private FollowService followService;
 
     @Override
     public CommonResult<ContentRespDTO> getContent(Long id) {
@@ -64,6 +67,8 @@ public class ContentApiImpl implements ContentApi {
         dto.setTotalCommentCount(defaultLong(stats.getTotalCommentCount()));
         dto.setTotalCollectCount(defaultLong(stats.getTotalCollectCount()));
         dto.setTotalViewCount(defaultLong(stats.getTotalViewCount()));
+        dto.setFollowingCount(defaultLong(followService.countFollowing(userId)));
+        dto.setFollowersCount(defaultLong(followService.countFans(userId)));
         return success(dto);
     }
 

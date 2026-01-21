@@ -7,6 +7,7 @@
 DROP TABLE IF EXISTS content_favorite_record CASCADE;
 DROP TABLE IF EXISTS content_favorite_group CASCADE;
 DROP TABLE IF EXISTS content_ad CASCADE;
+DROP TABLE IF EXISTS content_ad_event CASCADE;
 DROP TABLE IF EXISTS content_interaction CASCADE;
 DROP TABLE IF EXISTS content_comment CASCADE;
 DROP TABLE IF EXISTS content_post CASCADE;
@@ -18,6 +19,7 @@ DROP TABLE IF EXISTS content_topic CASCADE;
 DROP SEQUENCE IF EXISTS content_favorite_record_seq;
 DROP SEQUENCE IF EXISTS content_favorite_group_seq;
 DROP SEQUENCE IF EXISTS content_ad_seq;
+DROP SEQUENCE IF EXISTS content_ad_event_seq;
 DROP SEQUENCE IF EXISTS content_interaction_seq;
 DROP SEQUENCE IF EXISTS content_comment_seq;
 DROP SEQUENCE IF EXISTS content_post_seq;
@@ -511,6 +513,41 @@ COMMENT ON COLUMN content_ad.deleted IS 'Logical delete flag: false=active true=
 
 
 
+
+
+-- =====================================================
+-- 8. content_ad_event (Ad event record)
+-- Based on ContentAdEventDO.java
+-- =====================================================
+CREATE SEQUENCE content_ad_event_seq START WITH 1 INCREMENT BY 1;
+
+CREATE TABLE content_ad_event (
+    id          int8         NOT NULL DEFAULT nextval('content_ad_event_seq'),
+    ad_id       int8         NOT NULL,
+    user_id     int8         NULL,
+    event_type  int2         NOT NULL,
+    scene       int2         NULL,
+
+    -- BaseDO fields
+    creator     varchar(64)  NULL     DEFAULT '',
+    create_time timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updater     varchar(64)  NULL     DEFAULT '',
+    update_time timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted     int2         NOT NULL DEFAULT 0,
+
+    CONSTRAINT pk_content_ad_event PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_content_ad_event_ad_id ON content_ad_event(ad_id);
+CREATE INDEX idx_content_ad_event_user_id ON content_ad_event(user_id);
+CREATE INDEX idx_content_ad_event_event_type ON content_ad_event(event_type);
+CREATE INDEX idx_content_ad_event_scene ON content_ad_event(scene);
+CREATE INDEX idx_content_ad_event_create_time ON content_ad_event(create_time DESC);
+CREATE INDEX idx_content_ad_event_deleted ON content_ad_event(deleted);
+
+COMMENT ON TABLE content_ad_event IS 'Ad event record';
+COMMENT ON COLUMN content_ad_event.event_type IS 'Event type: 1=impression 2=click';
+COMMENT ON COLUMN content_ad_event.deleted IS 'Logical delete flag: false=active true=deleted';
 -- Insert initial data
 -- =====================================================
 

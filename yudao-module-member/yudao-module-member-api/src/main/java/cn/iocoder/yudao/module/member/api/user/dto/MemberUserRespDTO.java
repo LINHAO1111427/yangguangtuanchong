@@ -21,6 +21,12 @@ public class MemberUserRespDTO {
     @Schema(description = "用户头像", example = "https://www.iocoder.cn/xxx.jpg")
     private String avatar;
 
+    @Schema(description = "小绿薯号", example = "10001")
+    private Long customId;
+
+    @Schema(description = "背景图", example = "https://www.iocoder.cn/bg.jpg")
+    private String backgroundUrl;
+
     @Schema(description = "手机号", example = "15601691300")
     private String mobile;
 

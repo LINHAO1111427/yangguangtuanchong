@@ -154,6 +154,42 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public boolean toggleLike(Long commentId, Long userId, String ipAddress, String userAgent) {
+        if (userId == null) {
+            throw exception(ErrorCodeConstants.COMMENT_ACCESS_DENIED);
+        }
+        if (commentId == null) {
+            throw exception(ErrorCodeConstants.COMMENT_NOT_EXISTS);
+        }
+        ContentCommentDO comment = commentMapper.selectById(commentId);
+        if (comment == null || Boolean.TRUE.equals(comment.getDeleted())) {
+            throw exception(ErrorCodeConstants.COMMENT_NOT_EXISTS);
+        }
+        if (comment.getStatus() == null || comment.getStatus() != COMMENT_STATUS_NORMAL) {
+            throw exception(ErrorCodeConstants.COMMENT_NOT_EXISTS);
+        }
+
+        boolean liked = localCommentLikeStorage.toggleLike(commentId, userId);
+        adjustCommentLikeCount(commentId, liked ? 1 : -1);
+
+        if (liked && comment.getUserId() != null && !Objects.equals(comment.getUserId(), userId)) {
+            Map<String, Object> event = new HashMap<>();
+            event.put("behaviorType", "comment_like");
+            event.put("action", "add");
+            event.put("actorUserId", userId);
+            event.put("targetUserId", comment.getUserId());
+            event.put("contentId", comment.getContentId());
+            event.put("commentId", comment.getId());
+            event.put("parentCommentId", comment.getParentId());
+            event.put("commentText", comment.getContent());
+            event.put("eventTime", LocalDateTime.now().toString());
+            contentKafkaProducer.sendBehaviorEvent(event);
+        }
+        return liked;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteComment(Long commentId, Long operatorUserId) {
         ContentCommentDO comment = commentMapper.selectById(commentId);
         if (comment == null || Boolean.TRUE.equals(comment.getDeleted())) {
@@ -429,6 +465,16 @@ public class CommentServiceImpl implements CommentService {
         LambdaUpdateWrapper<ContentCommentDO> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(ContentCommentDO::getId, commentId)
                 .setSql("reply_count = GREATEST(COALESCE(reply_count,0) + (" + delta + "), 0)");
+        commentMapper.update(null, updateWrapper);
+    }
+
+    private void adjustCommentLikeCount(Long commentId, int delta) {
+        if (commentId == null || commentId <= 0) {
+            return;
+        }
+        LambdaUpdateWrapper<ContentCommentDO> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(ContentCommentDO::getId, commentId)
+                .setSql("like_count = GREATEST(COALESCE(like_count,0) + (" + delta + "), 0)");
         commentMapper.update(null, updateWrapper);
     }
 

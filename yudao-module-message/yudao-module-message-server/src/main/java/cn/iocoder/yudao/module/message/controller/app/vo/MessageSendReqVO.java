@@ -16,9 +16,11 @@ import java.util.List;
 @Data
 public class MessageSendReqVO {
 
-    @Schema(description = "接收者用户ID", required = true, example = "2")
-    @NotNull(message = "接收者用户ID不能为空")
+    @Schema(description = "接收者用户ID", example = "2")
     private Long toUserId;
+
+    @Schema(description = "会话ID", example = "2024")
+    private Long conversationId;
 
     @Schema(description = "消息类型", required = true, example = "1")
     @NotNull(message = "消息类型不能为空")

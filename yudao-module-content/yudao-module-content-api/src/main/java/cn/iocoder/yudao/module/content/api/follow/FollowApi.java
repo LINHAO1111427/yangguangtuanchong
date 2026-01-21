@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
@@ -23,5 +24,16 @@ public interface FollowApi {
     @Operation(summary = "判断用户是否已关注目标用户")
     CommonResult<Boolean> isFollowingUser(@RequestParam("followerId") Long followerId,
                                           @RequestParam("targetId") Long targetId);
+
+    @PostMapping(PREFIX + "/follow-user")
+    @Operation(summary = "Follow user")
+    CommonResult<Boolean> followUser(@RequestParam("followerId") Long followerId,
+                                     @RequestParam("targetId") Long targetId,
+                                     @RequestParam(value = "remark", required = false) String remark);
+
+    @PostMapping(PREFIX + "/unfollow-user")
+    @Operation(summary = "Unfollow user")
+    CommonResult<Boolean> unfollowUser(@RequestParam("followerId") Long followerId,
+                                       @RequestParam("targetId") Long targetId);
 
 }

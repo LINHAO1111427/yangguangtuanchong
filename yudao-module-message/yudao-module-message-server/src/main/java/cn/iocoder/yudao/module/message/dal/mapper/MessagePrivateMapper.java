@@ -49,6 +49,14 @@ public interface MessagePrivateMapper extends BaseMapperX<MessagePrivateDO> {
         update(null, wrapper);
     }
 
+    default void updateStatusToRecallByAdmin(Long messageId) {
+        UpdateWrapper<MessagePrivateDO> wrapper = new UpdateWrapper<>();
+        wrapper.eq("id", messageId)
+                .set("status", 2)
+                .set("update_time", LocalDateTime.now());
+        update(null, wrapper);
+    }
+
     default void markAsDeleted(Long messageId, Long userId) {
         MessagePrivateDO message = selectById(messageId);
         if (message == null) {
@@ -64,5 +72,28 @@ public interface MessagePrivateMapper extends BaseMapperX<MessagePrivateDO> {
         wrapper.eq("id", messageId)
                 .set("deleted", newDeleted);
         update(null, wrapper);
+    }
+
+    default void markAsDeletedByAdmin(Long messageId) {
+        UpdateWrapper<MessagePrivateDO> wrapper = new UpdateWrapper<>();
+        wrapper.eq("id", messageId)
+                .set("deleted", 3)
+                .set("update_time", LocalDateTime.now());
+        update(null, wrapper);
+    }
+
+    default Long countRecentMessages(Long fromUserId, Long toUserId, Integer type, LocalDateTime since) {
+        return selectCount(new QueryWrapperX<MessagePrivateDO>()
+                .eq("from_user_id", fromUserId)
+                .eq("to_user_id", toUserId)
+                .eq("type", type)
+                .ge("create_time", since));
+    }
+
+    default boolean existsReply(Long fromUserId, Long toUserId) {
+        Long count = selectCount(new QueryWrapperX<MessagePrivateDO>()
+                .eq("from_user_id", fromUserId)
+                .eq("to_user_id", toUserId));
+        return count != null && count > 0;
     }
 }

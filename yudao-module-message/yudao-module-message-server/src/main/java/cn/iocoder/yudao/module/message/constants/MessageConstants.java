@@ -35,10 +35,10 @@ public interface MessageConstants {
      */
     interface BehaviorType {
         String LIKE = "like";
+        String COMMENT_LIKE = "comment_like";
         String COMMENT = "comment";
         String FOLLOW = "follow";
         String SHARE = "share";
         String COLLECT = "collect";
     }
 }
-

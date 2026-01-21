@@ -6,6 +6,7 @@ import cn.iocoder.yudao.module.message.dal.dataobject.GroupMessageDO;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -33,6 +34,15 @@ public interface GroupMessageMapper extends BaseMapperX<GroupMessageDO> {
                 .eq("status", 0)
                 .orderByDesc("create_time")
                 .last("LIMIT " + limit));
+    }
+
+    default void updateStatusToDeleted(Long messageId) {
+        UpdateWrapper<GroupMessageDO> wrapper = new UpdateWrapper<>();
+        wrapper.eq("id", messageId)
+                .set("status", 2)
+                .set("deleted", 1)
+                .set("update_time", LocalDateTime.now());
+        update(null, wrapper);
     }
 
 }

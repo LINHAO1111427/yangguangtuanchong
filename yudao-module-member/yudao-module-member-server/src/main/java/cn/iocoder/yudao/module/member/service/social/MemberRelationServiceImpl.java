@@ -2,7 +2,7 @@ package cn.iocoder.yudao.module.member.service.social;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
-import cn.hutool.core.util.RandomUtil;
+import cn.iocoder.yudao.module.content.api.follow.FollowApi;
 import cn.iocoder.yudao.module.member.dal.dataobject.social.MemberBlacklistDO;
 import cn.iocoder.yudao.module.member.dal.dataobject.social.MemberContactStatDO;
 import cn.iocoder.yudao.module.member.dal.dataobject.social.MemberFriendRelationDO;
@@ -16,12 +16,12 @@ import cn.iocoder.yudao.module.member.service.social.bo.MemberPotentialFriendBO;
 import cn.iocoder.yudao.module.member.service.social.bo.MemberRelationSummary;
 import cn.iocoder.yudao.module.member.service.social.bo.MemberSocialUserBO;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -35,9 +35,8 @@ import static cn.iocoder.yudao.module.member.enums.ErrorCodeConstants.*;
  * @author sun
  */
 @Service
+@Slf4j
 public class MemberRelationServiceImpl implements MemberRelationService {
-
-    private static final AtomicLong REQUEST_ID = new AtomicLong(10_0000L);
 
     @Resource
     private MemberFriendRelationMapper relationMapper;
@@ -49,6 +48,8 @@ public class MemberRelationServiceImpl implements MemberRelationService {
     private MemberUserMapper memberUserMapper;
     @Resource
     private MemberBehaviorEventProducer behaviorEventProducer;
+    @Resource
+    private FollowApi followApi;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -74,7 +75,6 @@ public class MemberRelationServiceImpl implements MemberRelationService {
         Integer previousState = relation != null ? relation.getState() : null;
         if (relation == null) {
             relation = new MemberFriendRelationDO();
-            relation.setId(REQUEST_ID.incrementAndGet());
             relation.setUserId(userId);
             relation.setFriendId(targetUserId);
             relation.setRelationType(relationType);
@@ -93,8 +93,11 @@ public class MemberRelationServiceImpl implements MemberRelationService {
         }
 
         // 关注：生成“新增关注”通知（仅在从未关注 -> 已关注时触发）
-        if (autoApprove && (previousState == null || previousState != 1)) {
-            behaviorEventProducer.sendFollowEvent(userId, targetUserId);
+        if (autoApprove) {
+            syncContentFollowAdd(userId, targetUserId, createBO.getRequestMessage());
+            if (previousState == null || previousState != 1) {
+                behaviorEventProducer.sendFollowEvent(userId, targetUserId);
+            }
         }
         return relation.getId();
     }
@@ -111,6 +114,7 @@ public class MemberRelationServiceImpl implements MemberRelationService {
         relation.setState(1);
         relation.setLastActionAt(LocalDateTime.now());
         relationMapper.updateById(relation);
+        syncContentFollowAdd(relation.getUserId(), relation.getFriendId(), relation.getRequestMessage());
     }
 
     @Override
@@ -135,6 +139,8 @@ public class MemberRelationServiceImpl implements MemberRelationService {
                 && relationMapper.deleteByUserIdAndFriendId(targetUserId, userId) == 0) {
             throw exception(RELATION_REQUEST_NOT_EXISTS);
         }
+        syncContentFollowRemove(userId, targetUserId);
+        syncContentFollowRemove(targetUserId, userId);
     }
 
     @Override
@@ -149,7 +155,6 @@ public class MemberRelationServiceImpl implements MemberRelationService {
             return;
         }
         MemberBlacklistDO record = new MemberBlacklistDO();
-        record.setId(REQUEST_ID.incrementAndGet());
         record.setUserId(userId);
         record.setTargetId(targetUserId);
         record.setReason(reason);
@@ -224,6 +229,29 @@ public class MemberRelationServiceImpl implements MemberRelationService {
                 summary.setMutualFollow(summary.isFollowing() && follower);
             }
         }
+        if (followApi != null) {
+            for (Long targetId : targetUserIds) {
+                MemberRelationSummary summary = summaryMap.get(targetId);
+                if (summary == null) {
+                    continue;
+                }
+                if (!summary.isFollowing() && summary.getFollowState() != 0) {
+                    Boolean following = fetchFollowing(userId, targetId);
+                    if (Boolean.TRUE.equals(following)) {
+                        summary.setFollowing(true);
+                        summary.setFollowState(1);
+                        summary.setNeedApproval(false);
+                    }
+                }
+                if (!summary.isFollower()) {
+                    Boolean follower = fetchFollowing(targetId, userId);
+                    if (Boolean.TRUE.equals(follower)) {
+                        summary.setFollower(true);
+                    }
+                }
+                summary.setMutualFollow(summary.isFollowing() && summary.isFollower());
+            }
+        }
         myBlacklist.forEach(record -> {
             MemberRelationSummary summary = summaryMap.get(record.getTargetId());
             if (summary != null) {
@@ -253,6 +281,43 @@ public class MemberRelationServiceImpl implements MemberRelationService {
 
     private boolean isBlacklisted(Long userId, Long targetId) {
         return blacklistMapper.selectByUserIdAndTargetId(userId, targetId) != null;
+    }
+
+    private void syncContentFollowAdd(Long followerId, Long targetId, String remark) {
+        if (followerId == null || targetId == null || Objects.equals(followerId, targetId)) {
+            return;
+        }
+        try {
+            followApi.followUser(followerId, targetId, remark);
+        } catch (Exception ex) {
+            log.warn("Sync content follow add failed: followerId={}, targetId={}, reason={}",
+                    followerId, targetId, ex.getMessage());
+        }
+    }
+
+    private void syncContentFollowRemove(Long followerId, Long targetId) {
+        if (followerId == null || targetId == null || Objects.equals(followerId, targetId)) {
+            return;
+        }
+        try {
+            followApi.unfollowUser(followerId, targetId);
+        } catch (Exception ex) {
+            log.warn("Sync content follow remove failed: followerId={}, targetId={}, reason={}",
+                    followerId, targetId, ex.getMessage());
+        }
+    }
+
+    private Boolean fetchFollowing(Long followerId, Long targetId) {
+        if (followApi == null || followerId == null || targetId == null) {
+            return null;
+        }
+        try {
+            return followApi.isFollowingUser(followerId, targetId).getCheckedData();
+        } catch (Exception ex) {
+            log.warn("Load follow state failed: followerId={}, targetId={}, reason={}",
+                    followerId, targetId, ex.getMessage());
+            return null;
+        }
     }
 
     @Override
