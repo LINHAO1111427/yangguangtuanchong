@@ -1,0 +1,322 @@
+﻿version: "3.9"
+
+x-common-env: &common-env
+  TZ: Asia/Shanghai
+  SPRING_PROFILES_ACTIVE: local
+  SPRING_CLOUD_NACOS_SERVER_ADDR: nacos:8848
+  SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
+  SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+  SPRING_CLOUD_NACOS_USERNAME: nacos
+  SPRING_CLOUD_NACOS_PASSWORD: nacos
+  SPRING_CLOUD_NACOS_DISCOVERY_NAMESPACE: dev
+  SPRING_CLOUD_NACOS_CONFIG_NAMESPACE: dev
+  SPRING_CLOUD_NACOS_DISCOVERY_GROUP: DEFAULT_GROUP
+  SPRING_CLOUD_NACOS_CONFIG_GROUP: DEFAULT_GROUP
+  NACOS_ADDR: nacos:8848
+  NACOS_USERNAME: nacos
+  NACOS_PASSWORD: nacos
+  NACOS_NAMESPACE: dev
+  NACOS_GROUP: DEFAULT_GROUP
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: 6379
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+x-mysql-env: &mysql-env
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL: jdbc:mysql://mysql:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_USERNAME: root
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD: 123456
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_URL: jdbc:mysql://mysql:3306/ruoyi-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_USERNAME: root
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_PASSWORD: 123456
+
+x-postgres-content-env: &postgres-content-env
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL: jdbc:postgresql://postgres:5432/xiaolvshu_content
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_USERNAME: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_URL: jdbc:postgresql://postgres:5432/xiaolvshu_content
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_USERNAME: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_PASSWORD: postgres
+
+x-postgres-message-env: &postgres-message-env
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL: jdbc:postgresql://postgres:5432/xiaolvshu_message
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_USERNAME: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_URL: jdbc:postgresql://postgres:5432/xiaolvshu_message
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_USERNAME: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_PASSWORD: postgres
+
+x-postgres-ruoyi-env: &postgres-ruoyi-env
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL: jdbc:postgresql://postgres:5432/ruoyi-vue-pro
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_USERNAME: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_URL: jdbc:postgresql://postgres:5432/ruoyi-vue-pro
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_USERNAME: postgres
+  SPRING_DATASOURCE_DYNAMIC_DATASOURCE_SLAVE_PASSWORD: postgres
+
+services:
+  mysql:
+    image: docker.m.daocloud.io/mysql:8.0
+    container_name: xltc-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: ruoyi-vue-pro
+      TZ: Asia/Shanghai
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci]
+    volumes:
+      - postgres_data:/var/lib/mysql
+      - ./sql/mysql/ruoyi-vue-pro.sql:/docker-entrypoint-initdb.d/01-ruoyi-vue-pro.sql:ro
+      - ./deploy/mysql-minio.sql:/docker-entrypoint-initdb.d/99-minio.sql:ro
+    ports:
+      - 3306:3306
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  postgres:
+    image: docker.m.daocloud.io/postgres:14
+    container_name: xltc-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+      - ./yudao-module-content/yudao-module-content-server/sql/postgresql/content_init.sql:/docker-entrypoint-initdb.d/content_init.sql:ro
+      - ./sql/postgresql/xiaolvshu-message.sql:/docker-entrypoint-initdb.d/xiaolvshu-message.sql:ro
+    ports:
+      - 5432:5432
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  redis:
+    image: docker.m.daocloud.io/redis:7
+    container_name: xltc-redis
+    command: [redis-server, --appendonly, yes]
+    volumes:
+      - redis_data:/data
+    ports:
+      - 6379:6379
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  zookeeper:
+    image: docker.m.daocloud.io/confluentinc/cp-zookeeper:7.5.0
+    container_name: xltc-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      TZ: Asia/Shanghai
+    ports:
+      - 2181:2181
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  kafka:
+    image: docker.m.daocloud.io/confluentinc/cp-kafka:7.5.0
+    container_name: xltc-kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - 9092:9092
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  nacos:
+    image: docker.m.daocloud.io/nacos/nacos-server:v2.2.0
+    container_name: xltc-nacos
+    environment:
+      MODE: standalone
+      TZ: Asia/Shanghai
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+      JVM_XMN: 128m
+    ports:
+      - 8848:8848
+      - 9848:9848
+      - 9849:9849
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:RELEASE.2024-04-18T19-09-19Z
+    container_name: xltc-minio
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      TZ: Asia/Shanghai
+    volumes:
+      - minio_data:/data
+    ports:
+      - 9000:9000
+      - 9001:9001
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-gateway:
+    build:
+      context: ./yudao-gateway
+      dockerfile: Dockerfile
+    container_name: xltc-gateway
+    environment:
+      <<: *common-env
+      JAVA_OPTS: -Xms256m -Xmx512m
+    depends_on:
+      - nacos
+      - redis
+      - kafka
+    ports:
+      - 48080:48080
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-system:
+    build:
+      context: ./yudao-module-system/yudao-module-system-server
+      dockerfile: Dockerfile
+    container_name: xltc-system
+    environment:
+      <<: [*common-env, *postgres-ruoyi-env]
+      JAVA_OPTS: -Xms256m -Xmx512m
+      SPRING_DATA_REDIS_DATABASE: 0
+    depends_on:
+      - nacos
+      - postgres
+      - redis
+      - kafka
+    ports:
+      - 48081:48081
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-infra:
+    build:
+      context: ./yudao-module-infra/yudao-module-infra-server
+      dockerfile: Dockerfile
+    container_name: xltc-infra
+    environment:
+      <<: [*common-env, *postgres-ruoyi-env]
+      JAVA_OPTS: -Xms256m -Xmx512m
+      SPRING_DATA_REDIS_DATABASE: 0
+    depends_on:
+      - nacos
+      - postgres
+      - redis
+      - kafka
+      - minio
+    ports:
+      - 48082:48082
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-content:
+    build:
+      context: ./yudao-module-content/yudao-module-content-server
+      dockerfile: Dockerfile
+    container_name: xltc-content
+    environment:
+      <<: [*common-env, *postgres-content-env]
+      JAVA_OPTS: -Xms256m -Xmx512m
+      SPRING_DATA_REDIS_DATABASE: 1
+    depends_on:
+      - nacos
+      - postgres
+      - redis
+      - kafka
+    ports:
+      - 48083:48083
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-message:
+    build:
+      context: ./yudao-module-message/yudao-module-message-server
+      dockerfile: Dockerfile
+    container_name: xltc-message
+    environment:
+      <<: [*common-env, *postgres-message-env]
+      JAVA_OPTS: -Xms256m -Xmx512m
+      SPRING_DATA_REDIS_DATABASE: 0
+    depends_on:
+      - nacos
+      - postgres
+      - redis
+      - kafka
+    ports:
+      - 48084:48084
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-pay:
+    build:
+      context: ./yudao-module-pay/yudao-module-pay-server
+      dockerfile: Dockerfile
+    container_name: xltc-pay
+    environment:
+      <<: [*common-env, *postgres-ruoyi-env]
+      JAVA_OPTS: -Xms256m -Xmx512m
+      SPRING_DATA_REDIS_DATABASE: 0
+    depends_on:
+      - nacos
+      - postgres
+      - redis
+      - kafka
+    ports:
+      - 48085:48085
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+  yudao-member:
+    build:
+      context: ./yudao-module-member/yudao-module-member-server
+      dockerfile: Dockerfile
+    container_name: xltc-member
+    environment:
+      <<: [*common-env, *postgres-ruoyi-env]
+      JAVA_OPTS: -Xms256m -Xmx512m
+      SPRING_DATA_REDIS_DATABASE: 0
+    depends_on:
+      - nacos
+      - postgres
+      - redis
+      - kafka
+    ports:
+      - 48087:48087
+    networks:
+      - xiaolvshu-net
+    restart: unless-stopped
+
+networks:
+  xiaolvshu-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  postgres_data:
+  redis_data:
+  minio_data:
