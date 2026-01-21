@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.Collection;
 import java.util.List;
@@ -34,6 +35,17 @@ public interface ContentInteractionMapper extends BaseMapperX<ContentInteraction
     ContentInteractionDO selectOneIncludeDeleted(@Param("contentId") Long contentId,
                                                  @Param("userId") Long userId,
                                                  @Param("type") Integer type);
+
+    @Update("""
+            UPDATE content_interaction
+               SET ip_address = #{ipAddress},
+                   user_agent = #{userAgent},
+                   deleted = #{deleted},
+                   update_time = #{updateTime},
+                   updater = #{updater}
+             WHERE id = #{id}
+            """)
+    int updateByIdIncludeDeleted(ContentInteractionDO interaction);
 
     default List<ContentInteractionDO> selectRecent(Long userId, Integer type, int limit) {
         LambdaQueryWrapperX<ContentInteractionDO> wrapper = new LambdaQueryWrapperX<ContentInteractionDO>()
@@ -90,12 +102,10 @@ public interface ContentInteractionMapper extends BaseMapperX<ContentInteraction
      * 按用户和交互类型批量软删
      */
     default int softDeleteByUserAndType(Long userId, Integer type) {
-        LambdaQueryWrapperX<ContentInteractionDO> wrapper = new LambdaQueryWrapperX<ContentInteractionDO>()
-                .eq(ContentInteractionDO::getUserId, userId)
-                .eq(ContentInteractionDO::getInteractionType, type);
-        ContentInteractionDO update = new ContentInteractionDO();
-        update.setDeleted((short) 1);
-        return update(update, wrapper);
+        if (userId == null || type == null) {
+            return 0;
+        }
+        return softDeleteByUserAndTypeDirect(userId, type);
     }
 
     /**
@@ -105,14 +115,29 @@ public interface ContentInteractionMapper extends BaseMapperX<ContentInteraction
         if (userId == null || CollUtil.isEmpty(contentIds)) {
             return 0;
         }
-        LambdaQueryWrapperX<ContentInteractionDO> wrapper = new LambdaQueryWrapperX<ContentInteractionDO>()
-                .eq(ContentInteractionDO::getUserId, userId)
-                .eq(ContentInteractionDO::getInteractionType, type)
-                .in(ContentInteractionDO::getContentId, contentIds);
-        ContentInteractionDO update = new ContentInteractionDO();
-        update.setDeleted((short) 1);
-        return update(update, wrapper);
+        return softDeleteByUserAndTypeAndContentIdsDirect(userId, type, contentIds);
     }
+
+    @Update("UPDATE content_interaction SET deleted = 1, update_time = NOW() " +
+            "WHERE user_id = #{userId} AND interaction_type = #{type}")
+    int softDeleteByUserAndTypeDirect(@Param("userId") Long userId,
+                                      @Param("type") Integer type);
+
+    @Update({
+            "<script>",
+            "UPDATE content_interaction",
+            " SET deleted = 1, update_time = NOW()",
+            " WHERE user_id = #{userId}",
+            " AND interaction_type = #{type}",
+            " AND content_id IN",
+            " <foreach collection='contentIds' item='id' open='(' separator=',' close=')'>",
+            "   #{id}",
+            " </foreach>",
+            "</script>"
+    })
+    int softDeleteByUserAndTypeAndContentIdsDirect(@Param("userId") Long userId,
+                                                   @Param("type") Integer type,
+                                                   @Param("contentIds") Collection<Long> contentIds);
 
     @Delete("DELETE FROM content_interaction WHERE user_id = #{userId} AND interaction_type = #{type}")
     int hardDeleteByUserAndType(@Param("userId") Long userId,

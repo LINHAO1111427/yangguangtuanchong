@@ -12,6 +12,7 @@ import cn.iocoder.yudao.module.content.service.vo.ContentAuthorStats;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -115,6 +116,24 @@ public interface ContentMapper extends BaseMapperX<ContentDO> {
             """)
     ContentAuthorStats selectAuthorStats(@Param("userId") Long userId,
                                          @Param("status") Integer publishedStatus);
+
+    @Update("""
+            UPDATE content_post
+               SET like_count = GREATEST(COALESCE(like_count, 0) + #{delta}, 0),
+                   update_time = NOW()
+             WHERE id = #{contentId}
+               AND deleted = 0
+            """)
+    int updateLikeCount(@Param("contentId") Long contentId, @Param("delta") int delta);
+
+    @Update("""
+            UPDATE content_post
+               SET collect_count = GREATEST(COALESCE(collect_count, 0) + #{delta}, 0),
+                   update_time = NOW()
+             WHERE id = #{contentId}
+               AND deleted = 0
+            """)
+    int updateCollectCount(@Param("contentId") Long contentId, @Param("delta") int delta);
 
     default LambdaQueryWrapperX<ContentDO> buildPageWrapper(ContentPageReqVO reqVO) {
         LambdaQueryWrapperX<ContentDO> wrapper = new LambdaQueryWrapperX<>();

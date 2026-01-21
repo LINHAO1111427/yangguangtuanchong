@@ -28,6 +28,7 @@ import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -286,13 +287,11 @@ public class ContentServiceImpl implements ContentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean toggleLike(Long contentId, Long userId, String ipAddress, String userAgent) {
         ContentDO content = validateContentVisible(contentId);
         boolean liked = toggleInteraction(contentId, userId, INTERACTION_LIKE, ipAddress, userAgent);
-        int likeCount = safeInt(content.getLikeCount()) + (liked ? 1 : -1);
-        content.setLikeCount(Math.max(likeCount, 0));
-        content.setUpdateTime(LocalDateTime.now());
-        contentMapper.updateById(content);
+        contentMapper.updateLikeCount(contentId, liked ? 1 : -1);
         if (liked) {
             Map<String, Object> event = new HashMap<>();
             event.put("behaviorType", "like");
@@ -308,16 +307,14 @@ public class ContentServiceImpl implements ContentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean toggleCollect(Long contentId, Long userId, String ipAddress, String userAgent) {
         ContentDO content = validateContentVisible(contentId);
         FavoriteActionReqBO reqBO = new FavoriteActionReqBO();
         reqBO.setContentId(contentId);
         boolean collected = contentFavoriteService.toggleFavorite(userId, reqBO);
         upsertInteraction(contentId, userId, INTERACTION_COLLECT, ipAddress, userAgent, collected);
-        int collectCount = safeInt(content.getCollectCount()) + (collected ? 1 : -1);
-        content.setCollectCount(Math.max(collectCount, 0));
-        content.setUpdateTime(LocalDateTime.now());
-        contentMapper.updateById(content);
+        contentMapper.updateCollectCount(contentId, collected ? 1 : -1);
         if (collected) {
             Map<String, Object> event = new HashMap<>();
             event.put("behaviorType", "collect");
@@ -782,7 +779,7 @@ public class ContentServiceImpl implements ContentService {
         if (interaction.getId() == null) {
             contentInteractionMapper.insert(interaction);
         } else {
-            contentInteractionMapper.updateById(interaction);
+            contentInteractionMapper.updateByIdIncludeDeleted(interaction);
         }
     }
 
