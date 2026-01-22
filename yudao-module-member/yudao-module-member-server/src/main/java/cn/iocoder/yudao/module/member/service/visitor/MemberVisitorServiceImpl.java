@@ -9,6 +9,8 @@ import cn.iocoder.yudao.module.member.dal.dataobject.visitor.MemberVisitorLogDO;
 import cn.iocoder.yudao.module.member.dal.mysql.visitor.MemberVisitorLogMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -120,16 +122,14 @@ public class MemberVisitorServiceImpl implements MemberVisitorService {
         if (userId == null) {
             return PageResult.empty();
         }
-        LambdaQueryWrapperX<MemberVisitorLogDO> wrapper = new LambdaQueryWrapperX<>();
+        Page<MemberVisitorLogDO> page = new Page<>(pageReqVO.getPageNo(), pageReqVO.getPageSize());
+        IPage<MemberVisitorLogDO> result;
         if (Boolean.TRUE.equals(pageReqVO.getAsVisitor())) {
-            wrapper.eq(MemberVisitorLogDO::getVisitorId, userId);
+            result = visitorLogMapper.selectPageByVisitor(page, userId, pageReqVO.getVisitType());
         } else {
-            wrapper.eq(MemberVisitorLogDO::getUserId, userId);
+            result = visitorLogMapper.selectPageByUser(page, userId, pageReqVO.getVisitType());
         }
-        wrapper.eqIfPresent(MemberVisitorLogDO::getVisitType, pageReqVO.getVisitType())
-                .eq(MemberVisitorLogDO::getDeleted, 0)
-                .orderByDesc(MemberVisitorLogDO::getCreateTime);
-        return visitorLogMapper.selectPage(pageReqVO, wrapper);
+        return new PageResult<>(result.getRecords(), result.getTotal());
     }
 
     @Override

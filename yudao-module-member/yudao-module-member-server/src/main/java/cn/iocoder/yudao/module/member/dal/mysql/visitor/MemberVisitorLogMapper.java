@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.member.dal.mysql.visitor;
 
 import cn.iocoder.yudao.framework.mybatis.core.mapper.BaseMapperX;
 import cn.iocoder.yudao.module.member.dal.dataobject.visitor.MemberVisitorLogDO;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -37,6 +38,36 @@ public interface MemberVisitorLogMapper extends BaseMapperX<MemberVisitorLogDO> 
     List<MemberVisitorDayRow> selectDailyDistinctVisitorCount(@Param("userId") Long userId,
                                                              @Param("beginTime") LocalDateTime beginTime,
                                                              @Param("endTime") LocalDateTime endTime);
+
+    @Select("""
+            SELECT id, user_id, visitor_id, visit_type, target_id, is_paid, pay_amount, tenant_id,
+                   create_time::timestamp AS create_time,
+                   update_time::timestamp AS update_time,
+                   creator, updater, deleted
+            FROM member_visitor_log
+            WHERE deleted = 0
+              AND visitor_id = #{visitorId}
+              AND (#{visitType} IS NULL OR visit_type = #{visitType})
+            ORDER BY create_time DESC
+            """)
+    IPage<MemberVisitorLogDO> selectPageByVisitor(IPage<?> page,
+                                                  @Param("visitorId") Long visitorId,
+                                                  @Param("visitType") Integer visitType);
+
+    @Select("""
+            SELECT id, user_id, visitor_id, visit_type, target_id, is_paid, pay_amount, tenant_id,
+                   create_time::timestamp AS create_time,
+                   update_time::timestamp AS update_time,
+                   creator, updater, deleted
+            FROM member_visitor_log
+            WHERE deleted = 0
+              AND user_id = #{userId}
+              AND (#{visitType} IS NULL OR visit_type = #{visitType})
+            ORDER BY create_time DESC
+            """)
+    IPage<MemberVisitorLogDO> selectPageByUser(IPage<?> page,
+                                               @Param("userId") Long userId,
+                                               @Param("visitType") Integer visitType);
 
     class MemberVisitorDayRow {
         private String day;
