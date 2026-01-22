@@ -39,32 +39,36 @@ public interface MemberVisitorLogMapper extends BaseMapperX<MemberVisitorLogDO> 
                                                              @Param("beginTime") LocalDateTime beginTime,
                                                              @Param("endTime") LocalDateTime endTime);
 
-    @Select("""
-            SELECT id, user_id, visitor_id, visit_type, target_id, is_paid, pay_amount, tenant_id,
-                   create_time::timestamp AS create_time,
-                   update_time::timestamp AS update_time,
-                   creator, updater, deleted
-            FROM member_visitor_log
-            WHERE deleted = 0
-              AND visitor_id = #{visitorId}
-              AND (#{visitType} IS NULL OR visit_type = #{visitType})
-            ORDER BY create_time DESC
-            """)
+    @Select({
+            "<script>",
+            "SELECT id, user_id, visitor_id, visit_type, target_id, is_paid, pay_amount, tenant_id,",
+            "       create_time::timestamp AS create_time,",
+            "       update_time::timestamp AS update_time,",
+            "       creator, updater, deleted",
+            "FROM member_visitor_log",
+            "WHERE deleted = 0",
+            "  AND visitor_id = #{visitorId}",
+            "  <if test='visitType != null'> AND visit_type = #{visitType} </if>",
+            "ORDER BY create_time DESC",
+            "</script>"
+    })
     IPage<MemberVisitorLogDO> selectPageByVisitor(IPage<?> page,
                                                   @Param("visitorId") Long visitorId,
                                                   @Param("visitType") Integer visitType);
 
-    @Select("""
-            SELECT id, user_id, visitor_id, visit_type, target_id, is_paid, pay_amount, tenant_id,
-                   create_time::timestamp AS create_time,
-                   update_time::timestamp AS update_time,
-                   creator, updater, deleted
-            FROM member_visitor_log
-            WHERE deleted = 0
-              AND user_id = #{userId}
-              AND (#{visitType} IS NULL OR visit_type = #{visitType})
-            ORDER BY create_time DESC
-            """)
+    @Select({
+            "<script>",
+            "SELECT id, user_id, visitor_id, visit_type, target_id, is_paid, pay_amount, tenant_id,",
+            "       create_time::timestamp AS create_time,",
+            "       update_time::timestamp AS update_time,",
+            "       creator, updater, deleted",
+            "FROM member_visitor_log",
+            "WHERE deleted = 0",
+            "  AND user_id = #{userId}",
+            "  <if test='visitType != null'> AND visit_type = #{visitType} </if>",
+            "ORDER BY create_time DESC",
+            "</script>"
+    })
     IPage<MemberVisitorLogDO> selectPageByUser(IPage<?> page,
                                                @Param("userId") Long userId,
                                                @Param("visitType") Integer visitType);
